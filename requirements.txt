@@ -1,0 +1,9 @@
+# UI Framework
+PyQt5>=5.15.4
+pyqtgraph>=0.12.4
+
+# Binance API Wrapper
+binance-connector>=1.11.0
+
+# Configuration and Environment Variables
+python-dotenv>=1.0.0
