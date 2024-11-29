@@ -56,3 +56,31 @@ class BinanceAPI:
         except Exception as e:
             self.logger.error(f"Error fetching depth data for {trading_pair}: {e}")
             raise
+
+    def get_ticker_info(self, trading_pair):
+        """
+        Fetches ticker information for the given trading pair.
+        :param trading_pair: The trading pair (e.g., BTCUSDT).
+        :return: A dictionary containing price, change, high, low, and volume.
+        """
+        try:
+            # Fetch current price
+            price = self.client.ticker_price(trading_pair)
+            # Fetch 24-hour statistics
+            stats = self.client.ticker_24hr(trading_pair)
+            
+            # Prepare the result dictionary
+            ticker_info = {
+                'price': float(price['price']),
+                'change': float(stats['priceChangePercent']),
+                'high': float(stats['highPrice']),
+                'low': float(stats['lowPrice']),
+                'volume': float(stats['volume'])
+            }
+
+            self.logger.debug(f"Fetched ticker info for {trading_pair}: {ticker_info}")
+            return ticker_info
+
+        except Exception as e:
+            self.logger.error(f"Error fetching ticker info for {trading_pair}: {e}")
+            raise
