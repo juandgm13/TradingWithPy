@@ -1,12 +1,20 @@
 from PyQt5.QtWidgets import QVBoxLayout, QWidget, QGraphicsRectItem
 import pyqtgraph as pg
+import datetime
 
+
+class TimeAxisItem(pg.AxisItem):
+    def tickStrings(self, values, scale, spacing):
+        """Convert timestamp values into human-readable date strings."""
+        return [datetime.datetime.fromtimestamp(value/1000).strftime("%Y-%m-%d %H:%M") for value in values]
+    
 
 class CandlestickChart(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout()
-        self.chart = pg.PlotWidget(title="Candlestick Chart")
+        # Create the chart with the custom time axis
+        self.chart = pg.PlotWidget(title="Candlestick Chart", axisItems={'bottom': TimeAxisItem(orientation='bottom')})
         self.chart.setLabel('bottom', 'Time')
         self.chart.setLabel('left', 'Price')
         layout.addWidget(self.chart)
@@ -56,7 +64,7 @@ class VolumeChart(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout()
-        self.chart = pg.PlotWidget(title="Volume Chart")
+        self.chart = pg.PlotWidget(title="Volume Chart", axisItems={'bottom': TimeAxisItem(orientation='bottom')})
         self.chart.setLabel('bottom', 'Time')
         self.chart.setLabel('left', 'Volume')
         layout.addWidget(self.chart)
