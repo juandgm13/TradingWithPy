@@ -1,10 +1,11 @@
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
-from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QLabel, QComboBox, QLineEdit, QTabWidget, QHBoxLayout, QRadioButton, QApplication
+from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QLabel, QComboBox, QLineEdit, QTabWidget, QHBoxLayout, QRadioButton, QCheckBox
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtGui import QIcon
 from app.utils.logger import setup_logger, verbose_level
 from app.api.api_wrapper import APIWrapper
-from app.ui.charts import CandlestickChart, VolumeChart, DepthChart
+from app.ui.charts import CandlestickChart, VolumeChart, DepthChart, RSIChart
+from app.utils.config import ConfigLoader
 
 class ChartUpdateWorker(QThread):
     data_fetched = pyqtSignal(list, dict)  # Emit a list for candlesticks and a dict for depth
@@ -16,11 +17,18 @@ class ChartUpdateWorker(QThread):
         self.trading_pair = trading_pair
         self.interval = interval
 
+        # Initialize the config loader
+        config = ConfigLoader("app/utils/config/config.json")
+
+        # Retrieve values from the configuration
+        self.num_candles = config.get("num_candles", 100)
+        self.rsi_period = config.get("rsi_period", 14)
+    
     def run(self):
         try:
             # Fetch candlestick and depth data
-            candlesticks = self.api_wrapper.get_candlestick_data(self.trading_pair, interval=self.interval)
-            depth = self.api_wrapper.get_depth_data(self.trading_pair)
+            candlesticks = self.api_wrapper.get_candlestick_data(self.trading_pair, interval=self.interval, limit=(self.num_candles+self.rsi_period))
+            depth = self.api_wrapper.get_depth_data(self.trading_pair, limit=(self.num_candles+self.rsi_period))
 
             # Emit the data
             self.data_fetched.emit(candlesticks, depth)
@@ -32,6 +40,13 @@ class ChartUpdateWorker(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+
+        # Initialize the config loader
+        config = ConfigLoader("app/utils/config/config.json")
+
+        # Retrieve values from the configuration
+        self.num_candles = config.get("num_candles", 100)
+        self.rsi_period = config.get("rsi_period", 14)
 
         # Set the window icon
         self.setWindowIcon(QIcon('app/resources/AppIcon.ico'))
@@ -69,7 +84,7 @@ class MainWindow(QMainWindow):
         self.update_timer.start(5000)
 
     def apply_dark_mode(self):
-        """Apply dark mode to the entire application."""
+        """Apply dark mode to the entire application and customize radio buttons and checkboxes."""
         palette = QPalette()
 
         # Set dark background
@@ -89,8 +104,8 @@ class MainWindow(QMainWindow):
         # Apply the palette to the entire application
         self.setPalette(palette)
 
-        # Set the radio buttons' style to match the dark theme
-        self.radio_15m.setStyleSheet("""
+        # Define a common stylesheet for radio buttons
+        self.radio_button_style = """
             QRadioButton {
                 color: white;
                 background-color: transparent;
@@ -102,49 +117,60 @@ class MainWindow(QMainWindow):
             QRadioButton::indicator:checked {
                 background-color: #444444;
             }
-        """)
+        """
 
-        self.radio_1h.setStyleSheet("""
-            QRadioButton {
+        # Define a common stylesheet for checkboxes
+        self.checkbox_style = """
+            QCheckBox {
                 color: white;
                 background-color: transparent;
             }
-            QRadioButton::indicator {
+            QCheckBox::indicator {
                 border: 1px solid #444444;
                 background-color: #2e2e2e;
             }
-            QRadioButton::indicator:checked {
+            QCheckBox::indicator:checked {
                 background-color: #444444;
             }
-        """)
+        """
+        
+        # List of all radio buttons
+        radio_buttons = [self.radio_15m, self.radio_1h, self.radio_4h, self.radio_1d]
 
-        self.radio_4h.setStyleSheet("""
-            QRadioButton {
-                color: white;
-                background-color: transparent;
-            }
-            QRadioButton::indicator {
-                border: 1px solid #444444;
-                background-color: #2e2e2e;
-            }
-            QRadioButton::indicator:checked {
-                background-color: #444444;
-            }
-        """)
+        # Apply the style to each radio button
+        for radio_button in radio_buttons:
+            radio_button.setStyleSheet(self.radio_button_style)
 
-        self.radio_1d.setStyleSheet("""
-            QRadioButton {
-                color: white;
-                background-color: transparent;
-            }
-            QRadioButton::indicator {
-                border: 1px solid #444444;
-                background-color: #2e2e2e;
-            }
-            QRadioButton::indicator:checked {
-                background-color: #444444;
-            }
-        """)
+        # List of all checkboxes (replace with your actual checkboxes)
+        checkboxes = [self.sma_checkbox, self.ema_checkbox, self.rsi_checkbox, self.bollinger_checkbox]  
+
+        # Apply the style to each checkbox
+        for checkbox in checkboxes:
+            checkbox.setStyleSheet(self.checkbox_style)
+
+    def update_checkbox_color(self):
+        if self.ema_checkbox.isChecked():
+            checkbox_style = """
+                                QCheckBox {
+                                    color: orange;  /* Text color */
+                                    background-color: transparent;
+                                }
+                            """
+            self.ema_checkbox.setStyleSheet(checkbox_style)
+        else:
+            self.ema_checkbox.setStyleSheet(self.checkbox_style)
+        
+        if self.sma_checkbox.isChecked():
+            checkbox_style = """
+                                QCheckBox {
+                                    color: blue;  /* Text color */
+                                    background-color: transparent;
+                                }
+                            """
+            self.sma_checkbox.setStyleSheet(checkbox_style)
+        else:
+            self.sma_checkbox.setStyleSheet(self.checkbox_style)
+        
 
     def init_ui(self):
         layout = QVBoxLayout()  # Use QVBoxLayout to stack widgets vertically
@@ -221,18 +247,45 @@ class MainWindow(QMainWindow):
         # Left side: Candlestick, Volume, Depth charts
         charts_left_layout = QVBoxLayout()
 
+        # Add a new layout for indicator selection
+        self.indicator_layout = QVBoxLayout()
+        self.indicators_label = QLabel("Indicators:")
+        self.indicators_label.setStyleSheet("color: white;")
+        self.indicator_layout.addWidget(self.indicators_label)
+
+        # Checkboxes for indicators
+        self.sma_checkbox = QCheckBox("SMA (Simple Moving Average)")
+        self.ema_checkbox = QCheckBox("EMA (Exponential Moving Average)")
+        self.rsi_checkbox = QCheckBox("RSI (Relative Strength Index)")
+        self.bollinger_checkbox = QCheckBox("Bollinger Bands")
+
+        # Add checkboxes to layout
+        self.indicator_layout.addWidget(self.sma_checkbox)
+        self.indicator_layout.addWidget(self.ema_checkbox)
+        self.indicator_layout.addWidget(self.rsi_checkbox)
+        self.indicator_layout.addWidget(self.bollinger_checkbox)
+
+
         self.candlestick_chart = CandlestickChart()
         self.volume_chart = VolumeChart()
         self.depth_chart = DepthChart()
 
+        # Initialize RSI chart widget (Initially hidden)
+        self.rsi_chart = RSIChart()
+        self.rsi_chart.setVisible(False)  
+
         # First section: Radio buttons for different intervals
-        self.radio_buttons_layout = QVBoxLayout()
+        self.radio_buttons_layout = QHBoxLayout()
 
         # Create radio buttons for different intervals
         self.radio_15m = QRadioButton("15 Min")
         self.radio_1h = QRadioButton("1 Hour")
         self.radio_4h = QRadioButton("4 Hour")
         self.radio_1d = QRadioButton("1 Day")
+        self.radio_15m.setMaximumWidth(55)
+        self.radio_1h.setMaximumWidth(35)
+        self.radio_4h.setMaximumWidth(35)
+        self.radio_1d.setMaximumWidth(35)
 
         # Set default selection for 1 Hour
         self.radio_1h.setChecked(True)
@@ -242,6 +295,7 @@ class MainWindow(QMainWindow):
         self.radio_buttons_layout.addWidget(self.radio_1h)
         self.radio_buttons_layout.addWidget(self.radio_4h)
         self.radio_buttons_layout.addWidget(self.radio_1d)
+        self.radio_buttons_layout.addStretch()
 
         # Connect radio buttons to the function that handles the selection
         self.radio_15m.toggled.connect(self.update_interval)
@@ -249,22 +303,24 @@ class MainWindow(QMainWindow):
         self.radio_4h.toggled.connect(self.update_interval)
         self.radio_1d.toggled.connect(self.update_interval)
 
-        # create horizontal layout for candlestick_chart and radiobutton
-        candlestick_And_Controls_horizontal_layout = QHBoxLayout()
-
         # Add candlestick chart
-        candlestick_And_Controls_horizontal_layout.addWidget(self.candlestick_chart)
-        candlestick_And_Controls_horizontal_layout.addLayout(self.radio_buttons_layout)
 
         # Add charts to the left layout
-        charts_left_layout.addLayout(candlestick_And_Controls_horizontal_layout)
+        charts_left_layout.addLayout(self.radio_buttons_layout)
+        charts_left_layout.addWidget(self.candlestick_chart)
         charts_left_layout.addWidget(self.volume_chart)
         charts_left_layout.addWidget(self.depth_chart)
+        charts_left_layout.addWidget(self.rsi_chart)
 
         horizontal_layout.addLayout(charts_left_layout)
 
         # Right side: Radio buttons for selecting interval
-        #right_vertical_layout = QVBoxLayout()
+        right_vertical_layout = QVBoxLayout()
+
+
+        # Add indicator layout to the right panel
+        right_vertical_layout.addLayout(self.indicator_layout)
+        right_vertical_layout.addStretch()
 
         # Add an empty panel below the radio buttons for debug purposes
         #empty_panel_1 = QWidget()
@@ -283,7 +339,7 @@ class MainWindow(QMainWindow):
         #right_vertical_layout.addWidget(empty_panel_2)
 
         # Add the right side layout (which contains radio buttons and empty panels) to the tab
-        #horizontal_layout.addLayout(right_vertical_layout)
+        horizontal_layout.addLayout(right_vertical_layout)
 
         self.charts_container.setLayout(horizontal_layout)
         self.tab_widget.addTab(self.charts_container, "Trading View")
@@ -300,6 +356,12 @@ class MainWindow(QMainWindow):
         # Load initial data
         self.start_chart_update()
         self.update_pair_info()
+
+        # Connect checkboxes to their respective functions
+        self.sma_checkbox.stateChanged.connect(self.update_interval)
+        self.ema_checkbox.stateChanged.connect(self.update_interval)
+        self.rsi_checkbox.stateChanged.connect(self.toggle_rsi)
+        self.bollinger_checkbox.stateChanged.connect(self.update_interval)
 
     def filter_pairs(self, search_text):
         """Filters the trading pairs in the dropdown based on search input."""
@@ -334,6 +396,7 @@ class MainWindow(QMainWindow):
         elif self.radio_1d.isChecked():
             self.selected_interval = '1d'
 
+        self.update_checkbox_color()
         self.start_chart_update()
 
     def start_chart_update(self):
@@ -353,21 +416,56 @@ class MainWindow(QMainWindow):
         self.chart_worker.start()
 
     def update_charts(self, candlesticks, depth):
-        """Updates the charts with fetched data."""
+        """Updates the charts with fetched data, including RSI."""
         try:
             # Update candlestick chart
-            self.candlestick_chart.update_chart(candlesticks)
-
+            try:
+                self.candlestick_chart.update_chart(candlesticks, self.rsi_period, 
+                                                    self.sma_checkbox.isChecked(),
+                                                    self.ema_checkbox.isChecked(),
+                                                    self.bollinger_checkbox.isChecked())                    
+                self.logger.info("Candlestick chart updated successfully.")
+            except Exception as e:
+                self.logger.error(f"Failed to update candlestick chart: {e}")
+                self.show_error_message(f"Candlestick chart error: {e}")
+            
             # Update volume chart
-            self.volume_chart.update_chart(candlesticks)
+            try:
+                self.volume_chart.update_chart(candlesticks, self.rsi_period)
+                self.logger.info("Volume chart updated successfully.")
+            except Exception as e:
+                self.logger.error(f"Failed to update volume chart: {e}")
+                self.show_error_message(f"Volume chart error: {e}")
 
             # Update depth chart
-            self.depth_chart.update_chart(depth)
-
+            try:
+                self.depth_chart.update_chart(depth, self.rsi_period)
+                self.logger.info("Depth chart updated successfully.")
+            except Exception as e:
+                self.logger.error(f"Failed to update depth chart: {e}")
+                self.show_error_message(f"Depth chart error: {e}")
+            
+            # Update RSI chart if there is enough data
+            try:
+                if len(candlesticks) > self.rsi_period:  # Ensure there's enough data for the default RSI period (14)
+                    closing_prices = [float(c[4]) for c in candlesticks]  # Extract closing prices
+                    self.rsi_chart.update_chart(closing_prices, period=self.rsi_period)
+                    self.logger.info("RSI chart updated successfully.")
+                else:
+                    self.logger.warning("Not enough candlestick data to update RSI chart.")
+            except Exception as e:
+                self.logger.error(f"Failed to update RSI chart: {e}")
+                self.show_error_message(f"RSI chart error: {e}")
+            
             self.logger.info(f"Charts updated for {self.current_pair}.")
+
         except Exception as e:
-            self.logger.error(f"Failed to update charts: {e}")
-            self.show_error_message(str(e))
+            self.logger.critical(f"Critical error during chart update: {e}")
+            self.show_error_message(f"Critical error: {str(e)}")
+
+    def toggle_rsi(self):
+        self.rsi_chart.setVisible(self.rsi_checkbox.isChecked())
+          
 
     def handle_chart_update_error(self, error_message):
         """Handles errors that occur during chart updates."""

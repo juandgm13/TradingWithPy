@@ -1,5 +1,7 @@
 from PyQt5.QtWidgets import QVBoxLayout, QWidget, QGraphicsRectItem
 import pyqtgraph as pg
+from PyQt5.QtCore import Qt
+from app.utils.indicators import IndicatorCalculator
 import datetime
 
 
@@ -20,10 +22,23 @@ class CandlestickChart(QWidget):
         layout.addWidget(self.chart)
         self.setLayout(layout)
 
-    def update_chart(self, candlestick_data):
-        """Updates the chart with standard candlestick format and adjusts scale."""
+    def update_chart(self, candlestick_data, period=0, sma_enabled=False, ema_enabled=False, bb_enabled=False):
+        """Updates the chart with standard candlestick format and time-based X-axis."""
         self.chart.clear()
 
+        # Add indicators if enabled
+        times = [c[0] for c in candlestick_data]
+        times=times[period:]
+        if(sma_enabled):
+            self.add_sma(period, candlestick_data, times)
+        if(ema_enabled):
+            self.add_ema(period, candlestick_data, times)
+        if(bb_enabled):
+            self.add_bollinger_bands(period, data=candlestick_data, times=times)
+
+        # Discard the period candlesticks if specified
+        candlestick_data = candlestick_data[period:]
+        
         # Extract data
         times = [c[0] for c in candlestick_data]
         opens = [float(c[1]) for c in candlestick_data]
@@ -58,6 +73,25 @@ class CandlestickChart(QWidget):
             self.chart.setXRange(min(times), max(times), padding=0.1)
             self.chart.setYRange(min(lows), max(highs), padding=0.1)
 
+    def add_sma(self, period=20, data=None, times=None):
+        """Calculate and plot the Simple Moving Average."""
+        sma_data = IndicatorCalculator.calculate_sma(period=period, candlesticks=data)
+        self.chart.plot(times, sma_data, pen=pg.mkPen('blue', width=1), name="SMA")
+
+    def add_ema(self, period=20, data=None, times=None):
+        """Calculate and plot the Exponential Moving Average."""
+        ema_data = IndicatorCalculator.calculate_ema(period, data)
+        self.chart.plot(times, ema_data[period:], pen=pg.mkPen('orange', width=1), name="EMA")
+    
+    def add_bollinger_bands(self, period=20, std_dev_multiplier=2, data=None, times=None):
+        """Calculate and plot Bollinger Bands."""
+        upper_band, lower_band = IndicatorCalculator.calculate_bollinger_bands(period, std_dev_multiplier, data)
+        # Plot the upper band in green
+        self.chart.plot(times, upper_band, pen=pg.mkPen('green', width=1), name="Upper Band")
+        # Plot the lower band in red
+        self.chart.plot(times, lower_band, pen=pg.mkPen('red', width=1), name="Lower Band")
+
+   
 
 
 class VolumeChart(QWidget):
@@ -70,9 +104,12 @@ class VolumeChart(QWidget):
         layout.addWidget(self.chart)
         self.setLayout(layout)
 
-    def update_chart(self, candlestick_data):
+    def update_chart(self, candlestick_data, discard_first_n=0):
         """Updates the volume chart with bars using distinct colors for buy/sell and adjusts scale."""
         self.chart.clear()
+
+        # Discard the first n candlesticks if specified
+        candlestick_data = candlestick_data[discard_first_n:]
 
         # Extract data
         times = [c[0] for c in candlestick_data]  # Timestamps
@@ -113,9 +150,13 @@ class DepthChart(QWidget):
         layout.addWidget(self.chart)
         self.setLayout(layout)
 
-    def update_chart(self, depth_data):
+    def update_chart(self, depth_data, discard_first_n=0):
         """Updates the depth chart with cumulative data and adjusts scale."""
         self.chart.clear()
+
+       # Discard the first n entries from bids and asks
+        bids = sorted(depth_data['bids'][discard_first_n:], key=lambda x: float(x[0]), reverse=True)
+        asks = sorted(depth_data['asks'][discard_first_n:], key=lambda x: float(x[0]))
 
         # Extract and sort data
         bids = sorted(depth_data['bids'], key=lambda x: float(x[0]), reverse=True)  # Descending prices
@@ -157,3 +198,64 @@ class DepthChart(QWidget):
             self.chart.setXRange(min(all_prices), max(all_prices), padding=0.1)
             self.chart.setYRange(0, max(all_volumes) * 1.1, padding=0.1)
 
+
+class RSIChart(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.chart = pg.PlotWidget(title="Relative Strength Index (RSI)")
+        self.chart.setLabel('left', 'RSI')
+        self.chart.setLabel('bottom', 'Time')
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.chart)
+        self.setLayout(layout)
+
+    def update_chart(self, data, period=14):
+        # Calculate RSI from the price data
+        rsi = self.__calculate_rsi(data, period)
+
+        # Plot the RSI data
+        self.chart.clear()  # Clear the previous plot
+        self.chart.plot(rsi, pen=pg.mkPen('purple', width=2), name=f'RSI ({period})')
+
+        # Add overbought (70) and oversold (30) lines
+        self.chart.addLine(y=70, pen=pg.mkPen('red', width=1, style=Qt.DashLine))  # Overbought line
+        self.chart.addLine(y=30, pen=pg.mkPen('green', width=1, style=Qt.DashLine))  # Oversold line
+
+    def __calculate_rsi(self, data, period=14):
+        gains = []
+        losses = []
+
+        for i in range(1, len(data)):
+            change = data[i] - data[i - 1]
+            gains.append(max(change, 0))
+            losses.append(abs(min(change, 0)))
+
+        # Calculate average gain and loss
+        avg_gain = sum(gains[:period]) / period
+        avg_loss = sum(losses[:period]) / period
+
+        rsi = [None] * period  # Padding initial values
+        
+        # Initial RS value
+        if avg_loss == 0:
+            rsi.append(100)
+        else:
+            rs = avg_gain / avg_loss
+            rsi.append(100 - (100 / (1 + rs)))
+
+        # Smoothly calculate RSI using the Wilder’s formula
+        for i in range(period + 1, len(data)):
+            avg_gain = (avg_gain * (period - 1) + gains[i - 1]) / period
+            avg_loss = (avg_loss * (period - 1) + losses[i - 1]) / period
+            
+            if avg_loss == 0:
+                rsi.append(100)
+            else:
+                rs = avg_gain / avg_loss
+                rsi.append(100 - (100 / (1 + rs)))
+
+        # Discard the first n candlesticks if specified
+        rsi = rsi[period:]
+            
+        return rsi
