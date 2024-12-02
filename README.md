@@ -15,7 +15,7 @@ A desktop-based trading dashboard built with PyQt5 that integrates charting, tra
 - Trading Actions: Allow placing market/limit orders directly from the dashboard.
 
 ## Trading Dashboard Overview
-![image](https://github.com/user-attachments/assets/71aa3ac7-9219-4833-a111-a8c976ca18da)
+![image](https://github.com/user-attachments/assets/4f0cfb99-10cc-48d9-8ef2-5a856a7b009e)
 
 ## Installation
 
