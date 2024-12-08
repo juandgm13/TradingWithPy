@@ -47,6 +47,7 @@ class MainWindow(QMainWindow):
         # Retrieve values from the configuration
         self.num_candles = config.get("num_candles", 100)
         self.rsi_period = config.get("rsi_period", 14)
+        self.timer_interval = config.get("timer_interval_ms", 5000)
 
         # Set the window icon
         self.setWindowIcon(QIcon('app/resources/AppIcon.ico'))
@@ -84,7 +85,7 @@ class MainWindow(QMainWindow):
         # Start a timer to update charts every 5 seconds
         self.update_timer = QTimer(self)
         self.update_timer.timeout.connect(self.start_main_window_update)
-        self.update_timer.start(5000)
+        self.update_timer.start(self.timer_interval)
 
         # Load initial data
         self.start_main_window_update()
@@ -92,7 +93,7 @@ class MainWindow(QMainWindow):
     def reset_update_timer(self):
         """Stop and restart the update timer"""
         self.update_timer.stop()  
-        self.update_timer.start(5000)
+        self.update_timer.start(self.timer_interval)
         self.logger.info("Update timer has been reset.")
         
     def apply_dark_mode(self):
