@@ -58,6 +58,7 @@ trading-dashboard/
 │   │   └── binance_api.py       # Binance Api implementation
 │   ├── ui/
 │   │   ├── charts.py            # Chart widget implementations
+│   │   ├── tabs_definition.py   # Tabs widget implementations
 │   │   └── main_window.py       # Main PyQt5 GUI layout and logic
 │   └── utils/         
 │       ├── logger.py            # Custom logger setup

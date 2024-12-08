@@ -1,19 +1,30 @@
-from binance.spot import Spot
+import os
 from app.utils.logger import setup_logger
+from app.api.binance_api import BinanceAPI
 
 class APIWrapper:
-    def __init__(self, api_key=None, api_secret=None, api_name="binance"):
+    def __init__(self, api_name="binance", logger=None):
         """
         Initialize the API wrapper.
-        :param api_key: Binance API key (optional)
-        :param api_secret: Binance API secret (optional)
         :param api_name: The name of the API, default is "binance"
+        :param logger: Initialized logger (optional)
         """
-        self.logger = setup_logger()
+        if logger==None:
+            self.logger = setup_logger()
+        else:
+            self.logger = logger
         
         # Initialize the Binance client
         if api_name == "binance":
-            self.client = Spot(api_key=api_key, api_secret=api_secret)
+            # Fetch the API key and secret from environment variables
+            api_key = os.environ.get('BINANCE_API_KEY')
+            api_secret = os.environ.get('BINANCE_API_SECRET')
+            if not api_key or not api_secret:
+                self.api_client = BinanceAPI(logger=self.logger)
+                self.logger.warning(f"Connected with API without Key nor Secret")
+            else:
+                self.api_client = BinanceAPI(api_key=api_key, api_secret=api_secret, logger=self.logger)
+                self.logger.info(f"Connected with API Key: {api_key} and Secret: {api_secret}")
         else:
             raise ValueError(f"Unsupported API: {api_name}")
         
@@ -21,17 +32,11 @@ class APIWrapper:
 
     def get_trading_pairs(self):
         """
-        Fetches all available trading pairs (symbols) from Binance.
+        Fetches all available trading pairs (symbols) from current API.
         :return: List of trading pairs as strings.
         """
-        try:
-            exchange_info = self.client.exchange_info()
-            symbols = [symbol['symbol'] for symbol in exchange_info['symbols']]
-            self.logger.debug(f"Fetched trading pairs: {symbols}")
-            return symbols
-        except Exception as e:
-            self.logger.error(f"Error fetching trading pairs: {e}")
-            raise
+        return self.api_client.get_trading_pairs()
+            
 
     def get_candlestick_data(self, trading_pair, interval='1h', limit=100):
         """
@@ -41,13 +46,7 @@ class APIWrapper:
         :param limit: Number of candlesticks to fetch (default: 100).
         :return: List of candlestick data.
         """
-        try:
-            candlesticks = self.client.klines(trading_pair, interval, limit=limit)
-            self.logger.debug(f"Fetched candlestick data for {trading_pair}: {candlesticks}")
-            return candlesticks
-        except Exception as e:
-            self.logger.error(f"Error fetching candlestick data for {trading_pair}: {e}")
-            raise
+        return self.api_client.get_candlestick_data(trading_pair, interval, limit)
 
     def get_depth_data(self, trading_pair, limit=100):
         """
@@ -56,13 +55,7 @@ class APIWrapper:
         :param limit: Number of levels to fetch (default: 100).
         :return: Depth data (bids and asks).
         """
-        try:
-            depth = self.client.depth(trading_pair, limit=limit)
-            self.logger.debug(f"Fetched depth data for {trading_pair}: {depth}")
-            return depth
-        except Exception as e:
-            self.logger.error(f"Error fetching depth data for {trading_pair}: {e}")
-            raise
+        return self.api_client.get_depth_data(trading_pair, limit)
 
     def get_ticker_info(self, trading_pair):
         """
@@ -70,24 +63,4 @@ class APIWrapper:
         :param trading_pair: The trading pair (e.g., BTCUSDT).
         :return: A dictionary containing price, change, high, low, and volume.
         """
-        try:
-            # Fetch current price
-            price = self.client.ticker_price(trading_pair)
-            # Fetch 24-hour statistics
-            stats = self.client.ticker_24hr(trading_pair)
-            
-            # Prepare the result dictionary
-            ticker_info = {
-                'price': float(price['price']),
-                'change': float(stats['priceChangePercent']),
-                'high': float(stats['highPrice']),
-                'low': float(stats['lowPrice']),
-                'volume': float(stats['volume'])
-            }
-
-            self.logger.debug(f"Fetched ticker info for {trading_pair}: {ticker_info}")
-            return ticker_info
-
-        except Exception as e:
-            self.logger.error(f"Error fetching ticker info for {trading_pair}: {e}")
-            raise
+        return self.api_client.get_ticker_info(trading_pair)

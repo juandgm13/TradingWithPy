@@ -5,7 +5,7 @@ import os
 # Global variables to control the verbosity level and where to log
 verbose_level = 1       # Global variable to control the verbosity level (0: DEBUG, 1: INFO, 2: WARNING, 3: ERROR)
 log_to_terminal = True  # Whether to log to terminal (stdout)
-log_to_file = True      # Whether to log to a file (app.log)
+log_to_file = False      # Whether to log to a file (app.log)
 log_file_path = "logs/app.log"  # Specify the desired log file location
 
 # Create the logs directory if it doesn't exist

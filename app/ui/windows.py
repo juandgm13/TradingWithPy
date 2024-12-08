@@ -1,14 +1,14 @@
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
-from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QLabel, QComboBox, QLineEdit, QTabWidget, QHBoxLayout, QRadioButton, QCheckBox
+from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QLabel, QComboBox, QLineEdit, QTabWidget, QHBoxLayout
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtGui import QIcon
-from app.utils.logger import setup_logger, verbose_level
 from app.api.api_wrapper import APIWrapper
-from app.ui.charts import CandlestickChart, VolumeChart, DepthChart, RSIChart
 from app.utils.config import ConfigLoader
+from app.ui.tabs_definition import TradingViewTab
+from app.utils.logger import setup_logger
 
-class ChartUpdateWorker(QThread):
-    data_fetched = pyqtSignal(list, dict)  # Emit a list for candlesticks and a dict for depth
+class DataUpdateWorker(QThread):
+    data_fetched = pyqtSignal(list, dict, int)  # Emit a list for candlesticks and a dict for depth
     error_occurred = pyqtSignal(str)
 
     def __init__(self, api_wrapper, trading_pair, interval='1h'):
@@ -31,14 +31,14 @@ class ChartUpdateWorker(QThread):
             depth = self.api_wrapper.get_depth_data(self.trading_pair, limit=(self.num_candles+self.rsi_period))
 
             # Emit the data
-            self.data_fetched.emit(candlesticks, depth)
+            self.data_fetched.emit(candlesticks, depth, self.rsi_period)
         except Exception as e:
             # Emit the error
             self.error_occurred.emit(str(e))
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, logger=None):
         super().__init__()
 
         # Initialize the config loader
@@ -54,10 +54,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Trading Dashboard")
         self.setGeometry(100, 100, 1200, 800)
 
-        # Initialize logger and API wrapper
-        self.logger = setup_logger()  # Use the updated logger setup
-        self.logger.setLevel(verbose_level)
-        self.api_wrapper = APIWrapper(api_name="binance")  # Initialize with Binance API
+        # Initialize logger
+        if logger==None:
+            self.logger = setup_logger()
+        else:
+            self.logger = logger
+
+        # Initialize API wrapper
+        self.api_wrapper = APIWrapper(api_name="binance",logger=self.logger)  # Initialize with Binance API
 
         self.trading_pairs = self.api_wrapper.get_trading_pairs()
         self.filtered_pairs = self.trading_pairs[:]  # Copy for filtering
@@ -79,10 +83,18 @@ class MainWindow(QMainWindow):
 
         # Start a timer to update charts every 5 seconds
         self.update_timer = QTimer(self)
-        self.update_timer.timeout.connect(self.start_chart_update)
-        self.update_timer.timeout.connect(self.update_pair_info)
+        self.update_timer.timeout.connect(self.start_main_window_update)
         self.update_timer.start(5000)
 
+        # Load initial data
+        self.start_main_window_update()
+
+    def reset_update_timer(self):
+        """Stop and restart the update timer"""
+        self.update_timer.stop()  
+        self.update_timer.start(5000)
+        self.logger.info("Update timer has been reset.")
+        
     def apply_dark_mode(self):
         """Apply dark mode to the entire application and customize radio buttons and checkboxes."""
         palette = QPalette()
@@ -102,75 +114,10 @@ class MainWindow(QMainWindow):
         palette.setColor(QPalette.HighlightedText, Qt.white)  # Selected text color
 
         # Apply the palette to the entire application
-        self.setPalette(palette)
+        self.setPalette(palette)        
 
-        # Define a common stylesheet for radio buttons
-        self.radio_button_style = """
-            QRadioButton {
-                color: white;
-                background-color: transparent;
-            }
-            QRadioButton::indicator {
-                border: 1px solid #444444;
-                background-color: #2e2e2e;
-            }
-            QRadioButton::indicator:checked {
-                background-color: #444444;
-            }
-        """
-
-        # Define a common stylesheet for checkboxes
-        self.checkbox_style = """
-            QCheckBox {
-                color: white;
-                background-color: transparent;
-            }
-            QCheckBox::indicator {
-                border: 1px solid #444444;
-                background-color: #2e2e2e;
-            }
-            QCheckBox::indicator:checked {
-                background-color: #444444;
-            }
-        """
-        
-        # List of all radio buttons
-        radio_buttons = [self.radio_15m, self.radio_1h, self.radio_4h, self.radio_1d]
-
-        # Apply the style to each radio button
-        for radio_button in radio_buttons:
-            radio_button.setStyleSheet(self.radio_button_style)
-
-        # List of all checkboxes (replace with your actual checkboxes)
-        checkboxes = [self.sma_checkbox, self.ema_checkbox, self.rsi_checkbox, self.bollinger_checkbox]  
-
-        # Apply the style to each checkbox
-        for checkbox in checkboxes:
-            checkbox.setStyleSheet(self.checkbox_style)
-
-    def update_checkbox_color(self):
-        if self.ema_checkbox.isChecked():
-            checkbox_style = """
-                                QCheckBox {
-                                    color: orange;  /* Text color */
-                                    background-color: transparent;
-                                }
-                            """
-            self.ema_checkbox.setStyleSheet(checkbox_style)
-        else:
-            self.ema_checkbox.setStyleSheet(self.checkbox_style)
-        
-        if self.sma_checkbox.isChecked():
-            checkbox_style = """
-                                QCheckBox {
-                                    color: blue;  /* Text color */
-                                    background-color: transparent;
-                                }
-                            """
-            self.sma_checkbox.setStyleSheet(checkbox_style)
-        else:
-            self.sma_checkbox.setStyleSheet(self.checkbox_style)
-        
+        # Apply tdark mode to the tabs
+        self.trading_view_tab.apply_dark_mode_to_tab()
 
     def init_ui(self):
         layout = QVBoxLayout()  # Use QVBoxLayout to stack widgets vertically
@@ -240,109 +187,12 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        # Initialize chart widgets
-        self.charts_container = QWidget()
-        horizontal_layout = QHBoxLayout()
+        self.trading_view_tab = TradingViewTab(logger=self.logger)
+        self.tab_widget.addTab(self.trading_view_tab, "Trading View")
 
-        # Left side: Candlestick, Volume, Depth charts
-        charts_left_layout = QVBoxLayout()
-
-        # Add a new layout for indicator selection
-        self.indicator_layout = QVBoxLayout()
-        self.indicators_label = QLabel("Indicators:")
-        self.indicators_label.setStyleSheet("color: white;")
-        self.indicator_layout.addWidget(self.indicators_label)
-
-        # Checkboxes for indicators
-        self.sma_checkbox = QCheckBox("SMA (Simple Moving Average)")
-        self.ema_checkbox = QCheckBox("EMA (Exponential Moving Average)")
-        self.rsi_checkbox = QCheckBox("RSI (Relative Strength Index)")
-        self.bollinger_checkbox = QCheckBox("Bollinger Bands")
-
-        # Add checkboxes to layout
-        self.indicator_layout.addWidget(self.sma_checkbox)
-        self.indicator_layout.addWidget(self.ema_checkbox)
-        self.indicator_layout.addWidget(self.rsi_checkbox)
-        self.indicator_layout.addWidget(self.bollinger_checkbox)
-
-
-        self.candlestick_chart = CandlestickChart()
-        self.volume_chart = VolumeChart()
-        self.depth_chart = DepthChart()
-
-        # Initialize RSI chart widget (Initially hidden)
-        self.rsi_chart = RSIChart()
-        self.rsi_chart.setVisible(False)  
-
-        # First section: Radio buttons for different intervals
-        self.radio_buttons_layout = QHBoxLayout()
-
-        # Create radio buttons for different intervals
-        self.radio_15m = QRadioButton("15 Min")
-        self.radio_1h = QRadioButton("1 Hour")
-        self.radio_4h = QRadioButton("4 Hour")
-        self.radio_1d = QRadioButton("1 Day")
-        self.radio_15m.setMaximumWidth(55)
-        self.radio_1h.setMaximumWidth(35)
-        self.radio_4h.setMaximumWidth(35)
-        self.radio_1d.setMaximumWidth(35)
-
-        # Set default selection for 1 Hour
-        self.radio_1h.setChecked(True)
-
-        # Add radio buttons to layout
-        self.radio_buttons_layout.addWidget(self.radio_15m)
-        self.radio_buttons_layout.addWidget(self.radio_1h)
-        self.radio_buttons_layout.addWidget(self.radio_4h)
-        self.radio_buttons_layout.addWidget(self.radio_1d)
-        self.radio_buttons_layout.addStretch()
-
-        # Connect radio buttons to the function that handles the selection
-        self.radio_15m.toggled.connect(self.update_interval)
-        self.radio_1h.toggled.connect(self.update_interval)
-        self.radio_4h.toggled.connect(self.update_interval)
-        self.radio_1d.toggled.connect(self.update_interval)
-
-        # Add candlestick chart
-
-        # Add charts to the left layout
-        charts_left_layout.addLayout(self.radio_buttons_layout)
-        charts_left_layout.addWidget(self.candlestick_chart)
-        charts_left_layout.addWidget(self.volume_chart)
-        charts_left_layout.addWidget(self.depth_chart)
-        charts_left_layout.addWidget(self.rsi_chart)
-
-        horizontal_layout.addLayout(charts_left_layout)
-
-        # Right side: Radio buttons for selecting interval
-        right_vertical_layout = QVBoxLayout()
-
-
-        # Add indicator layout to the right panel
-        right_vertical_layout.addLayout(self.indicator_layout)
-        right_vertical_layout.addStretch()
-
-        # Add an empty panel below the radio buttons for debug purposes
-        #empty_panel_1 = QWidget()
-        #empty_layout_1 = QVBoxLayout()
-        #empty_layout_1.addWidget(QLabel("Empty Panel 1"))
-        #empty_panel_1.setLayout(empty_layout_1)
-        #empty_panel_1.setStyleSheet("background-color: #444444; color: white;")
-        #right_vertical_layout.addWidget(empty_panel_1)
-
-        # Second section: Empty panel with debug text
-        #empty_panel_2 = QWidget()
-        #empty_layout_2 = QVBoxLayout()
-        ##empty_layout_2.addWidget(QLabel("Empty Panel 2"))
-        #empty_panel_2.setLayout(empty_layout_2)
-        #empty_panel_2.setStyleSheet("background-color: #444444; color: white;")
-        #right_vertical_layout.addWidget(empty_panel_2)
-
-        # Add the right side layout (which contains radio buttons and empty panels) to the tab
-        horizontal_layout.addLayout(right_vertical_layout)
-
-        self.charts_container.setLayout(horizontal_layout)
-        self.tab_widget.addTab(self.charts_container, "Trading View")
+        # Connect signal of trading view tab
+        self.trading_view_tab.interval_changed.connect(self.update_interval)
+        self.trading_view_tab.need_update.connect(self.start_main_window_update)
 
         # Add the tab widget below the trading pair information
         layout.addWidget(self.tab_widget)
@@ -352,16 +202,10 @@ class MainWindow(QMainWindow):
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
 
-
-        # Load initial data
-        self.start_chart_update()
-        self.update_pair_info()
-
-        # Connect checkboxes to their respective functions
-        self.sma_checkbox.stateChanged.connect(self.update_interval)
-        self.ema_checkbox.stateChanged.connect(self.update_interval)
-        self.rsi_checkbox.stateChanged.connect(self.toggle_rsi)
-        self.bollinger_checkbox.stateChanged.connect(self.update_interval)
+    def update_interval(self, new_interval):
+        self.logger.info(f"Interval has been updated ({self.selected_interval}->{new_interval}).")
+        self.selected_interval = new_interval
+        self.start_main_window_update()
 
     def filter_pairs(self, search_text):
         """Filters the trading pairs in the dropdown based on search input."""
@@ -382,99 +226,7 @@ class MainWindow(QMainWindow):
     def on_pair_changed(self, trading_pair):
         """Handles change in trading pair selection."""
         self.current_pair = trading_pair
-        self.start_chart_update()
-        self.update_pair_info()
-
-    def update_interval(self):
-        """Updates the candlestick chart interval based on selected radio button."""
-        if self.radio_15m.isChecked():
-            self.selected_interval = '15m'
-        elif self.radio_1h.isChecked():
-            self.selected_interval = '1h'
-        elif self.radio_4h.isChecked():
-            self.selected_interval = '4h'
-        elif self.radio_1d.isChecked():
-            self.selected_interval = '1d'
-
-        self.update_checkbox_color()
-        self.start_chart_update()
-
-    def start_chart_update(self):
-        """Starts the chart update process in a background thread."""
-        if not self.current_pair:
-            self.logger.warning("No trading pair selected to update charts.")
-            return
-
-        if self.chart_worker and self.chart_worker.isRunning():
-            self.logger.warning("Chart update is already in progress. Skipping this update.")
-            return
-
-        self.logger.debug(f"Starting chart update for {self.current_pair} with interval {self.selected_interval}.")
-        self.chart_worker = ChartUpdateWorker(self.api_wrapper, self.current_pair, self.selected_interval)
-        self.chart_worker.data_fetched.connect(self.update_charts)
-        self.chart_worker.error_occurred.connect(self.handle_chart_update_error)
-        self.chart_worker.start()
-
-    def update_charts(self, candlesticks, depth):
-        """Updates the charts with fetched data, including RSI."""
-        try:
-            # Update candlestick chart
-            try:
-                self.candlestick_chart.update_chart(candlesticks, self.rsi_period, 
-                                                    self.sma_checkbox.isChecked(),
-                                                    self.ema_checkbox.isChecked(),
-                                                    self.bollinger_checkbox.isChecked())                    
-                self.logger.info("Candlestick chart updated successfully.")
-            except Exception as e:
-                self.logger.error(f"Failed to update candlestick chart: {e}")
-                self.show_error_message(f"Candlestick chart error: {e}")
-            
-            # Update volume chart
-            try:
-                self.volume_chart.update_chart(candlesticks, self.rsi_period)
-                self.logger.info("Volume chart updated successfully.")
-            except Exception as e:
-                self.logger.error(f"Failed to update volume chart: {e}")
-                self.show_error_message(f"Volume chart error: {e}")
-
-            # Update depth chart
-            try:
-                self.depth_chart.update_chart(depth, self.rsi_period)
-                self.logger.info("Depth chart updated successfully.")
-            except Exception as e:
-                self.logger.error(f"Failed to update depth chart: {e}")
-                self.show_error_message(f"Depth chart error: {e}")
-            
-            # Update RSI chart if there is enough data
-            try:
-                if len(candlesticks) > self.rsi_period:  # Ensure there's enough data for the default RSI period (14)
-                    closing_prices = [float(c[4]) for c in candlesticks]  # Extract closing prices
-                    self.rsi_chart.update_chart(closing_prices, period=self.rsi_period)
-                    self.logger.info("RSI chart updated successfully.")
-                else:
-                    self.logger.warning("Not enough candlestick data to update RSI chart.")
-            except Exception as e:
-                self.logger.error(f"Failed to update RSI chart: {e}")
-                self.show_error_message(f"RSI chart error: {e}")
-            
-            self.logger.info(f"Charts updated for {self.current_pair}.")
-
-        except Exception as e:
-            self.logger.critical(f"Critical error during chart update: {e}")
-            self.show_error_message(f"Critical error: {str(e)}")
-
-    def toggle_rsi(self):
-        self.rsi_chart.setVisible(self.rsi_checkbox.isChecked())
-          
-
-    def handle_chart_update_error(self, error_message):
-        """Handles errors that occur during chart updates."""
-        self.logger.error(f"Chart update error: {error_message}")
-        self.show_error_message(error_message)
-
-    def show_error_message(self, message):
-        """Placeholder for actual error message handling in UI."""
-        self.logger.warning(f"Error: {message}")
+        self.start_main_window_update()
 
     def update_pair_info(self):
         """Fetches and updates the trading pair information."""
@@ -489,4 +241,37 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.logger.error(f"Failed to update pair info: {e}")
             self.show_error_message(f"Failed to fetch info for {self.current_pair}")
+
+    def start_main_window_update(self):
+        """Starts the main window update process in a background thread."""
+        self.reset_update_timer()
+        if not self.current_pair:
+            self.logger.warning("No trading pair selected to update main window.")
+            return
+
+        if self.chart_worker and self.chart_worker.isRunning():
+            self.logger.warning("main window update is already in progress. Skipping this update.")
+            return
+
+        self.logger.info(f"Starting main window update for {self.current_pair} with interval {self.selected_interval}.")
+        self.chart_worker = DataUpdateWorker(self.api_wrapper, self.current_pair, self.selected_interval)
+        self.chart_worker.data_fetched.connect(self.update_main_window)
+        self.chart_worker.error_occurred.connect(self.handle_update_main_window_error)
+        self.chart_worker.start()
+
+    def update_main_window(self, candlesticks, depth, rsi_period):
+        
+        self.trading_view_tab.update(candlesticks, depth, rsi_period)
+
+        self.update_pair_info()
+
+    def handle_update_main_window_error(self, error_message):
+        """Handles errors that occur during main window update."""
+        self.logger.error(f"Chart update error: {error_message}")
+        self.show_error_message(error_message)
+
+    def show_error_message(self, message):
+        """Placeholder for actual error message handling in UI."""
+        self.logger.warning(f"Error: {message}")
+
 

@@ -1,6 +1,7 @@
 import sys
 from PyQt5.QtWidgets import QApplication
 from app.ui.windows import MainWindow  
+from app.utils.logger import setup_logger
 
 def create_main_window():
     app = QApplication(sys.argv)
@@ -8,8 +9,11 @@ def create_main_window():
     if sys.platform == 'win32':
         import ctypes
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("TradingWithPy")  # Replace with a unique app ID
-        
-    window = MainWindow()
+    
+    # Initialize logger 
+    logger = setup_logger()
+
+    window = MainWindow(logger)
     window.show()
 
 

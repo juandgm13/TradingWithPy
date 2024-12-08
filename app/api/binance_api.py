@@ -2,13 +2,18 @@ from binance.spot import Spot
 from app.utils.logger import setup_logger
 
 class BinanceAPI:
-    def __init__(self, api_key=None, api_secret=None):
+    def __init__(self, api_key=None, api_secret=None, logger=None):
         """
         Initialize the Binance API wrapper.
         :param api_key: Binance API key (optional)
         :param api_secret: Binance API secret (optional)
+        :param logger: Initialized logger (optional)
         """
-        self.logger = setup_logger()
+        if logger==None:
+            self.logger = setup_logger()
+        else:
+            self.logger = logger
+        
         self.client = Spot(api_key=api_key, api_secret=api_secret)
         self.logger.info("BinanceAPI initialized.")
 
