@@ -1,21 +1,23 @@
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
-from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QLabel, QComboBox, QLineEdit, QTabWidget, QHBoxLayout
+from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QLabel, QComboBox, QLineEdit, QTabWidget, QHBoxLayout, QMessageBox
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtGui import QIcon
 from app.api.api_wrapper import APIWrapper
 from app.utils.config import ConfigLoader
-from app.ui.tabs_definition import TradingViewTab
+from app.ui.tabs_definition import TradingViewTab, OrdersTab
 from app.utils.logger import setup_logger
 
 class DataUpdateWorker(QThread):
-    data_fetched = pyqtSignal(list, dict, int)  # Emit a list for candlesticks and a dict for depth
+    update_tab = pyqtSignal(object, object, object, object)
+
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, api_wrapper, trading_pair, interval='1h'):
+    def __init__(self, api_wrapper, trading_pair, interval='1h', selected_tab="TradingView"):
         super().__init__()
         self.api_wrapper = api_wrapper
         self.trading_pair = trading_pair
         self.interval = interval
+        self.selected_tab=selected_tab
 
         # Initialize the config loader
         config = ConfigLoader("app/utils/config/config.json")
@@ -24,14 +26,23 @@ class DataUpdateWorker(QThread):
         self.num_candles = config.get("num_candles", 100)
         self.rsi_period = config.get("rsi_period", 14)
     
+    def emit_update_tab(self, candlesticks_data=None, depth_data=None, rsi_period_data=None, orders_data=None):
+        # Emit the signal, providing default None values where necessary
+        self.update_tab.emit(candlesticks_data, depth_data, rsi_period_data, orders_data)
+
     def run(self):
         try:
-            # Fetch candlestick and depth data
-            candlesticks = self.api_wrapper.get_candlestick_data(self.trading_pair, interval=self.interval, limit=(self.num_candles+self.rsi_period))
             depth = self.api_wrapper.get_depth_data(self.trading_pair, limit=(self.num_candles+self.rsi_period))
-
-            # Emit the data
-            self.data_fetched.emit(candlesticks, depth, self.rsi_period)
+            if self.selected_tab=="TradingView":
+                # Fetch candlestick and depth data
+                candlesticks = self.api_wrapper.get_candlestick_data(self.trading_pair, interval=self.interval, limit=(self.num_candles+self.rsi_period))
+                # Emit the data
+                self.emit_update_tab(candlesticks_data=candlesticks, depth_data=depth, rsi_period_data=self.rsi_period)
+            if self.selected_tab=="Orders":
+                orders = self.api_wrapper.get_open_orders(self.trading_pair)
+                # Emit the data
+                self.emit_update_tab(orders_data=orders, depth_data=depth)
+            
         except Exception as e:
             # Emit the error
             self.error_occurred.emit(str(e))
@@ -117,9 +128,6 @@ class MainWindow(QMainWindow):
         # Apply the palette to the entire application
         self.setPalette(palette)        
 
-        # Apply tdark mode to the tabs
-        self.trading_view_tab.apply_dark_mode_to_tab()
-
     def init_ui(self):
         layout = QVBoxLayout()  # Use QVBoxLayout to stack widgets vertically
 
@@ -195,6 +203,18 @@ class MainWindow(QMainWindow):
         self.trading_view_tab.interval_changed.connect(self.update_interval)
         self.trading_view_tab.need_update.connect(self.start_main_window_update)
 
+        self.orders_tab = OrdersTab(logger=self.logger)
+        self.tab_widget.addTab(self.orders_tab, "Orders")
+
+        # Connect the OrdersTab signal to the main window's order creation handler
+        self.orders_tab.order_requested.connect(self.handle_order_request)
+
+        # Connect the tab change signal to a handler
+        self.tab_widget.currentChanged.connect(self.handle_tab_change)
+
+
+        self.handle_tab_change(self.tab_widget.currentIndex(), False)
+        
         # Add the tab widget below the trading pair information
         layout.addWidget(self.tab_widget)
 
@@ -202,6 +222,44 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
+
+    def handle_tab_change(self, index, update=True):
+        """
+        Handles tab change events and updates only the visible tab.
+        """
+        current_tab = self.tab_widget.widget(index)
+        if current_tab == self.trading_view_tab:
+            self.tab_selected="TradingView"
+        elif current_tab == self.orders_tab:
+            self.tab_selected="Orders"
+        
+        if(update):
+            self.start_main_window_update()
+
+    def handle_order_request(self, order_details):
+        """
+        Handles the order request signal from the OrdersTab and places the order using the API.
+        """
+        order_details["symbol"] = self.current_pair  # Add the selected pair from the main window context
+        order_details["type"] = "LIMIT"  # Assuming LIMIT order by default
+
+        try:
+            response = self.api_wrapper.place_order(order_details)
+            self.logger.info(f"Order placed: {response}")
+            # Format the order details for the message
+            message = (
+                f"Side: {response.get('side', 'Unknown')}\n"
+                f"Symbol: {response.get('symbol', 'Unknown')}\n"
+                f"Price: {response.get('price', 'Unknown')}\n"
+                f"Quantity: {response.get('origQty', 'Unknown')}\n"
+                f"Order ID: {response.get('orderId', 'Unknown')}\n"
+                f"Status: {response.get('status', 'Unknown')}"
+            )
+            self.show_popup("Order Created Successfully!", message)
+        except Exception as e:
+            self.logger.error(f"Failed to place order: {e}")
+            self.show_popup("Order Creation Failed!", e.error_message)
+
 
     def update_interval(self, new_interval):
         self.logger.info(f"Interval has been updated ({self.selected_interval}->{new_interval}).")
@@ -255,15 +313,18 @@ class MainWindow(QMainWindow):
             return
 
         self.logger.info(f"Starting main window update for {self.current_pair} with interval {self.selected_interval}.")
-        self.chart_worker = DataUpdateWorker(self.api_wrapper, self.current_pair, self.selected_interval)
-        self.chart_worker.data_fetched.connect(self.update_main_window)
+        self.chart_worker = DataUpdateWorker(self.api_wrapper, self.current_pair, self.selected_interval, self.tab_selected)
+        self.chart_worker.update_tab.connect(self.update_main_window)
         self.chart_worker.error_occurred.connect(self.handle_update_main_window_error)
         self.chart_worker.start()
 
-    def update_main_window(self, candlesticks, depth, rsi_period):
+    def update_main_window(self, candlesticks=None, depth=None, rsi_period=None, orders=None, tickets=None):
+        self.logger.info(f"Window update showing {self.tab_selected} information.")
+        if (self.tab_selected=="TradingView"):
+            self.trading_view_tab.update(candlesticks, depth, rsi_period)
+        if (self.tab_selected=="Orders"):
+            self.orders_tab.update(open_orders=orders, order_book_data=depth)
         
-        self.trading_view_tab.update(candlesticks, depth, rsi_period)
-
         self.update_pair_info()
 
     def handle_update_main_window_error(self, error_message):
@@ -275,4 +336,23 @@ class MainWindow(QMainWindow):
         """Placeholder for actual error message handling in UI."""
         self.logger.warning(f"Error: {message}")
 
+    def show_popup(self, title, message):
+        """
+        Displays a popup with a message.
+
+        Args:
+            title: title for the message box.
+            message: text to show.
+        """
+        # Create a message box
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Information)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+
+        # Add an OK button to close the popup
+        msg_box.setStandardButtons(QMessageBox.Ok)
+        
+        # Show the message box
+        msg_box.exec_()
 

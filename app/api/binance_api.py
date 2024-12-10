@@ -2,7 +2,7 @@ from binance.spot import Spot
 from app.utils.logger import setup_logger
 
 class BinanceAPI:
-    def __init__(self, api_key=None, api_secret=None, logger=None):
+    def __init__(self, api_key=None, api_secret=None, logger=None, test_enabled=False):
         """
         Initialize the Binance API wrapper.
         :param api_key: Binance API key (optional)
@@ -14,8 +14,12 @@ class BinanceAPI:
         else:
             self.logger = logger
         
-        self.client = Spot(api_key=api_key, api_secret=api_secret)
-        self.logger.info("BinanceAPI initialized.")
+        if test_enabled:
+            self.client = Spot(api_key=api_key, api_secret=api_secret, base_url="https://testnet.binance.vision")
+            self.logger.info("BinanceAPI initialized (TestNET).")
+        else:
+            self.client = Spot(api_key=api_key, api_secret=api_secret)
+            self.logger.info("BinanceAPI initialized.")
 
     def get_trading_pairs(self):
         """
@@ -89,3 +93,51 @@ class BinanceAPI:
         except Exception as e:
             self.logger.error(f"Error fetching ticker info for {trading_pair}: {e}")
             raise
+
+    def get_open_orders(self, pair):
+        """
+        Fetch open orders for a specific trading pair.
+
+        Args:
+            pair (str): The trading pair, e.g., 'BTCUSDT'.
+
+        Returns:
+            list: A list of open orders as dictionaries.
+        """
+        try:
+            open_orders = self.client.get_open_orders(symbol=pair)
+            self.logger.info(f"Fetched {len(open_orders)} open orders for {pair}.")
+            return open_orders
+        except Exception as e:
+            self.logger.error(f"Failed to fetch open orders for {pair}: {str(e)}")
+            raise e
+
+    def place_order(self, order_details):
+        """
+        Places a new limit order.
+
+        Args:
+            order_details (dict): Details of the order to be placed, including:
+                                  - symbol (str): The trading pair, e.g., 'BTCUSDT'.
+                                  - side (str): 'BUY' or 'SELL'.
+                                  - type (str): Order type, e.g., 'LIMIT'.
+                                  - price (str): The order price as a string.
+                                  - quantity (str): The order quantity as a string.
+
+        Returns:
+            dict: The response from the Binance API containing order details.
+        """
+        try:
+            response = self.client.new_order(
+                symbol=order_details['symbol'],
+                side=order_details['side'],
+                type=order_details['type'],
+                timeInForce='GTC',  # Good-Till-Canceled
+                quantity=order_details['quantity'],
+                price=order_details['price']
+            )
+            self.logger.info(f"Placed order: {response}")
+            return response
+        except Exception as e:
+            self.logger.error(f"Failed to place order: {str(e)}")
+            raise e

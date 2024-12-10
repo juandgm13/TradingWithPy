@@ -1,6 +1,11 @@
-from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QCheckBox, QRadioButton
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QLabel,
+    QPushButton, QLineEdit, QTabWidget, QFormLayout, QSplitter,
+    QCheckBox, QRadioButton, QTableWidget, QTableWidgetItem
+)
+from PyQt5.QtGui import QColor
 from app.ui.charts import CandlestickChart, VolumeChart, DepthChart, RSIChart
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import pyqtSignal,Qt
 from app.utils.logger import setup_logger
 
 class TradingViewTab(QWidget):
@@ -17,6 +22,9 @@ class TradingViewTab(QWidget):
         
         # Initialize ui
         self.init_ui()
+
+        # Apply Dark mode 
+        self.apply_dark_mode_to_tab()
 
     def init_ui(self):
         """
@@ -263,3 +271,300 @@ class TradingViewTab(QWidget):
     def show_error_message(self, message):
         """Placeholder for actual error message handling in UI."""
         self.logger.warning(f"Error: {message}")
+
+
+
+class OrdersTab(QWidget):
+    order_requested = pyqtSignal(dict)  # Signal to send order details to the main window
+
+    def __init__(self, logger=None):
+        super().__init__()
+
+        if logger==None:
+            self.logger = setup_logger()
+        else:
+            self.logger = logger
+        
+        # Initialize ui
+        self.init_ui()
+        
+        # Apply Dark mode 
+        self.apply_dark_mode_to_tab()
+        
+    def init_ui(self):
+        """
+        Initialize the UI components for the tab.
+        """
+        # Layouts
+        main_layout = QHBoxLayout(self)
+        self.setLayout(main_layout)
+
+        # Tab container for Buy/Sell
+        self.buy_sell_tabs = QTabWidget()
+        self.buy_sell_tabs.setTabPosition(QTabWidget.North)
+
+        # Create separate layouts for Buy and Sell tabs
+        buy_tab = QWidget()
+        sell_tab = QWidget()
+
+        # Layout for the Buy tab
+        buy_tab_layout = QVBoxLayout()
+        buy_form_layout = QFormLayout()
+
+        # Buy Price input
+        self.buy_price_input = QLineEdit()
+        self.buy_price_input.setPlaceholderText("Enter price")
+        buy_form_layout.addRow("Price:", self.buy_price_input)
+
+        # Buy Quantity input
+        self.buy_quantity_input = QLineEdit()
+        self.buy_quantity_input.setPlaceholderText("Enter quantity")
+        buy_form_layout.addRow("Quantity:", self.buy_quantity_input)
+
+        # Execute Buy order button
+        self.buy_place_order_button = QPushButton("Place Buy Order")
+        self.buy_place_order_button.clicked.connect(self.emit_order_request)
+
+        # Add widgets to the Buy tab layout
+        buy_tab_layout.addLayout(buy_form_layout)
+        buy_tab_layout.addWidget(self.buy_place_order_button)
+        buy_tab.setLayout(buy_tab_layout)
+
+        # Layout for the Sell tab
+        sell_tab_layout = QVBoxLayout()
+        sell_form_layout = QFormLayout()
+
+        # Sell Price input
+        self.sell_price_input = QLineEdit()
+        self.sell_price_input.setPlaceholderText("Enter price")
+        sell_form_layout.addRow("Price:", self.sell_price_input)
+
+        # Sell Quantity input
+        self.sell_quantity_input = QLineEdit()
+        self.sell_quantity_input.setPlaceholderText("Enter quantity")
+        sell_form_layout.addRow("Quantity:", self.sell_quantity_input)
+
+        # Execute Sell order button
+        self.sell_place_order_button = QPushButton("Place Sell Order")
+        self.sell_place_order_button.clicked.connect(self.emit_order_request)
+
+        # Add widgets to the Sell tab layout
+        sell_tab_layout.addLayout(sell_form_layout)
+        sell_tab_layout.addWidget(self.sell_place_order_button)
+        sell_tab.setLayout(sell_tab_layout)
+
+        # Add tabs to the TabWidget
+        self.buy_sell_tabs.addTab(buy_tab, "Buy")
+        self.buy_sell_tabs.addTab(sell_tab, "Sell")
+
+        # Set custom colors for tabs
+        self.buy_sell_tabs.tabBar().setStyleSheet("""
+            QTabBar::tab {
+                background-color: #1E1E1E;
+                color: #FFFFFF;
+                padding: 6px;
+            }
+            QTabBar::tab:selected {
+                background-color: #333333;
+                color: #FFFFFF;
+            }
+            QTabBar::tab:first {
+                color: green; /* Buy tab */
+            }
+            QTabBar::tab:last {
+                color: red; /* Sell tab */
+            }
+        """)
+
+        # Right side: Open orders list
+        self.order_book = QTableWidget()
+        self.order_book.setColumnCount(2)  # Columns for Price and Qty
+        self.order_book.setHorizontalHeaderLabels(["Price", "Qty"])
+        self.order_book.setSortingEnabled(False)  # Allow sorting by clicking headers
+
+        right_side_layout = QVBoxLayout()
+        self.order_book_label = QLabel("Order Book")
+        right_side_layout.addWidget(self.order_book_label)
+        right_side_layout.addWidget(self.order_book)
+
+        # Splitter for resizing (horizontal)
+        splitter_H = QSplitter(Qt.Horizontal)
+        left_widget = QWidget()
+        left_widget.setLayout(QVBoxLayout())
+        left_widget.layout().addWidget(self.buy_sell_tabs)
+        right_widget = QWidget()
+        right_widget.setLayout(right_side_layout)
+
+        splitter_H.addWidget(left_widget)
+        splitter_H.addWidget(right_widget)
+
+        # Set proportional sizes using stretch factors
+        splitter_H.setStretchFactor(0, 3)  # Left widget takes 3 parts of 4
+        splitter_H.setStretchFactor(1, 1)  # Right widget takes 1 part of 4
+
+        self.orders_list = QListWidget()
+        self.orders_list_label = QLabel("My Open Orders")
+        orders_layout = QVBoxLayout()
+        orders_layout.addWidget(self.orders_list_label)
+        orders_layout.addWidget(self.orders_list)
+
+        # Splitter for resizing (vertical)
+        splitter_V = QSplitter(Qt.Vertical)
+        splitter_V.addWidget(splitter_H)
+        lower_widget = QWidget()
+        lower_widget.setLayout(orders_layout)
+
+        splitter_V.addWidget(lower_widget)
+
+        # Set proportional sizes using stretch factors
+        splitter_V.setStretchFactor(0, 3)  # Upper widget takes 3 parts of 4
+        splitter_V.setStretchFactor(1, 1)  # Lower widget takes 1 part of 4
+
+        # Add the splitter to the main layout
+        main_layout.addWidget(splitter_V)
+   
+    def apply_dark_mode_to_tab(self):
+        """
+        Apply dark mode styles to the tab components.
+        """
+        dark_stylesheet = """
+        QWidget {
+            background-color: #121212;
+            color: #FFFFFF;
+        }
+        QLineEdit {
+            background-color: #1E1E1E;
+            color: #FFFFFF;
+            border: 1px solid #333333;
+            border-radius: 4px;
+            padding: 4px;
+        }
+        QPushButton {
+            background-color: #333333;
+            color: #FFFFFF;
+            border: 1px solid #444444;
+            border-radius: 4px;
+            padding: 6px 12px;
+        }
+        QPushButton:hover {
+            background-color: #444444;
+        }
+        QPushButton:pressed {
+            background-color: #555555;
+        }
+        QLabel {
+            color: #FFFFFF;
+        }
+        QTableWidget {
+            background-color: #1E1E1E;
+            color: #FFFFFF;
+            border: 1px solid #333333;
+            gridline-color: #444444;
+        }
+        QHeaderView::section {
+            background-color: #333333;
+            color: #FFFFFF;
+            border: 1px solid #444444;
+        }
+        QTabWidget::pane {
+            border: 1px solid #333333;
+        }
+        QTabBar::tab {
+            background-color: #1E1E1E;
+            color: #FFFFFF;
+            padding: 6px;
+        }
+        QTabBar::tab:selected {
+            background-color: #333333;
+            color: #FFFFFF;
+        }
+        QListWidget {
+            background-color: #1E1E1E;
+            color: #FFFFFF;
+            border: 1px solid #333333;
+        }
+        """
+        self.setStyleSheet(dark_stylesheet)
+
+    def update(self, open_orders=None, order_book_data=None):
+        """
+        Update the tab's content using the provided data.
+        """
+
+        # Extract and sort data
+        bids = sorted(order_book_data['bids'], key=lambda x: float(x[0]), reverse=True)  # Descending prices
+        asks = sorted(order_book_data['asks'], key=lambda x: float(x[0]))  # Ascending prices
+
+        bids=bids[len(bids)-5:]
+        asks=asks[len(asks)-5:]
+
+        self.order_book.setRowCount(10)
+        row=0
+        color=QColor("green")
+        for bid in bids:
+            item_bid_price = QTableWidgetItem(bid[0])
+            item_bid_price.setForeground(color)  
+            item_bid_qty = QTableWidgetItem(bid[1])
+            item_bid_qty.setForeground(color)  
+            self.order_book.setItem(row, 0, item_bid_price)
+            self.order_book.setItem(row, 1, item_bid_qty)
+            row+=1
+            
+        color=QColor("red")
+        for ask in asks:
+            item_ask_price = QTableWidgetItem(ask[0])
+            item_ask_price.setForeground(color)  
+            item_ask_qty = QTableWidgetItem(ask[1])
+            item_ask_qty.setForeground(color)  
+            self.order_book.setItem(row, 0, item_ask_price)
+            self.order_book.setItem(row, 1, item_ask_qty)
+            row+=1
+
+        # Resize columns to fit contents
+        self.order_book.resizeColumnsToContents()
+        
+        # Update my orders
+        self.orders_list.clear()
+        if(len(open_orders)):
+            for order in open_orders:
+                item = f"{order['side']} | Price: {order['price']} | Qty: {order['origQty']}"
+                self.orders_list.addItem(item)
+        else:
+            self.orders_list.addItem("None open orders")
+
+    def emit_order_request(self):
+        """
+        Emits the `order_requested` signal with order details when the Place Order button is clicked.
+        """
+        # Check which tab is currently selected: Buy (index 0) or Sell (index 1)
+        if self.buy_sell_tabs.currentIndex() == 0:  # Buy tab selected
+            side = "BUY"
+            price = self.buy_price_input.text()  # Get price from Buy tab
+            quantity = self.buy_quantity_input.text()  # Get quantity from Buy tab
+        else:  # Sell tab selected
+            side = "SELL"
+            price = self.sell_price_input.text()  # Get price from Sell tab
+            quantity = self.sell_quantity_input.text()  # Get quantity from Sell tab
+
+        # Ensure the inputs are valid
+        if not price or not quantity:
+            self.logger.warning("Price or quantity is missing!")
+            return
+
+        try:
+            # Prepare the order details to emit
+            order_details = {
+                "side": side,  # Buy or Sell
+                "price": price,  # Price for the order
+                "quantity": quantity  # Quantity for the order
+            }
+
+            # Emit the order_requested signal with the order details
+            self.order_requested.emit(order_details)
+
+            # Optionally, you could log the order request
+            self.logger.info(f"Order requested by UI: {side} {quantity} @ {price}")
+
+        except Exception as e:
+            # Handle any exceptions and log the error
+            self.logger.error(f"Failed to emit order request: {e}")
