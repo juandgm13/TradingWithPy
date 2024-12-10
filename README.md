@@ -7,15 +7,16 @@ A desktop-based trading dashboard built with PyQt5 that integrates charting, tra
 - 🔧 Extensible Design: Built with modular components to easily add support for other exchanges.
 - 🖥️ Windows Native UI: Desktop-friendly interface with buttons, controls, and charts. (Dark mode)
 - 📊 Technical Indicators: Added support for SMA, EMA, Bollinger Bands with the ability to toggle indicators on/off using checkboxes and load their configurations from a JSON file.
+- 🛒 Orders Tab: Manage orders with ease: View real-time Order Book for the selected trading pair. Place Buy or Sell orders with price and quantity inputs and monitor Open Orders.
+- 🧪 Testnet Mode: Enable Binance testnet trading for safe order creation and management: Toggle testnet mode with the enable_test_trading parameter in the JSON configuration file.
   
 ## Planned Features
 - Support for additional exchanges (via modular API integration).
 - Strategy backtesting and automated trading.
 - Notification System: Push alerts for significant price changes.
-- Trading Actions: Allow placing market/limit orders directly from the dashboard.
 
 ## Trading Dashboard Overview
-![image](https://github.com/user-attachments/assets/4f0cfb99-10cc-48d9-8ef2-5a856a7b009e)
+![image](https://github.com/user-attachments/assets/f29490b7-7bc7-47b4-bdc0-74b48a1fa805)
 
 ## Installation
 
@@ -36,6 +37,8 @@ pip install -r requirements.txt
 ```plaintext
 BINANCE_API_KEY=your_api_key
 BINANCE_API_SECRET=your_api_secret
+BINANCE_API_KEY_TEST=your_api_key (for testnet)
+BINANCE_API_SECRET_TEST=your_api_secret (for testnet)
 ```
 
 ## Usage
@@ -47,8 +50,8 @@ python app/main.py
 1. Launch the UI.
 2. Fetch real-time market data.
 3. Enable/disable indicators (SMA, EMA, Bollinger Bands) using checkboxes in the UI.
-4. Customize indicator settings through a config.json file for dynamic configuration.
-   
+4. Customize indicator settings and enable test mode through a config.json file for dynamic configuration.
+
 ## File Structure
 ```plantext
 trading-dashboard/
