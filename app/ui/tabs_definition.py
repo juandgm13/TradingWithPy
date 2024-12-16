@@ -568,3 +568,94 @@ class OrdersTab(QWidget):
         except Exception as e:
             # Handle any exceptions and log the error
             self.logger.error(f"Failed to emit order request: {e}")
+
+
+class BalanceTab(QWidget):
+    """
+    A tab to display the user's current spot balance.
+    """
+    def __init__(self, logger=None):
+        super().__init__()
+
+        if logger==None:
+            self.logger = setup_logger()
+        else:
+            self.logger = logger
+        
+        # Initialize ui
+        self.init_ui()
+
+        # Apply Dark mode 
+        self.apply_dark_mode_to_tab()
+
+    def init_ui(self):
+        """
+        Initialize the UI components for the Balance tab.
+        """
+        layout = QVBoxLayout(self)
+
+        # Title
+        self.balance_label = QLabel("Spot Balances")
+        layout.addWidget(self.balance_label)
+
+        # Balance Table
+        self.balance_table = QTableWidget(self)
+        self.balance_table.setColumnCount(2)  # Asset and Balance
+        self.balance_table.setHorizontalHeaderLabels(["Asset", "Balance"])
+        layout.addWidget(self.balance_table)
+
+        # Set custom row height and column width for better readability
+        self.balance_table.verticalHeader().setDefaultSectionSize(30)  # Row height
+        self.balance_table.horizontalHeader().setStretchLastSection(True)  # Stretch the last column
+
+        # Set layout
+        self.setLayout(layout)
+
+    def apply_dark_mode_to_tab(self):
+        """
+        Apply dark mode styles to the Balance tab.
+        """
+        self.setStyleSheet("""
+            QLabel {
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QTableWidget {
+                background-color: #2b2b2b;
+                color: white;
+                gridline-color: gray;
+                border: 1px solid gray;
+            }
+            QTableWidget::item {
+                background-color: #2b2b2b;
+                color: white;
+            }
+            QHeaderView::section {
+                background-color: #3b3b3b;
+                color: white;
+                padding: 4px;
+                border: 1px solid gray;
+            }
+        """)
+
+    def update(self, balances):
+        """
+        Update the balance table with the provided balances.
+
+        Args:
+            balances (dict): A dictionary where the keys are asset symbols (e.g., "BTC")
+                            and the values are their respective balances.
+        """
+        try:
+            self.balance_table.setRowCount(len(balances))  # Set row count
+
+            for row, (asset, balance) in enumerate(balances.items()):
+                self.balance_table.setItem(row, 0, QTableWidgetItem(asset))  # Asset
+                self.balance_table.setItem(row, 1, QTableWidgetItem(str(balance)))  # Balance
+            
+            self.logger.info(f"Balance table updated.")
+
+        except Exception as e:
+            self.logger.error(f"Error updating balances: {e}")
+            

@@ -105,3 +105,11 @@ class APIWrapper:
             dict: The response from the Binance API containing order details.
         """
         return self.api_client.place_order(order_details)
+    
+    def get_account_balances(self):
+        """
+        Fetch the user's current spot balances.
+        Returns:
+            dict: A dictionary with asset names as keys and balances as values.
+        """
+        return self.api_client.get_account_balances()

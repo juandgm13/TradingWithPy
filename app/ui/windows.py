@@ -4,11 +4,11 @@ from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtGui import QIcon
 from app.api.api_wrapper import APIWrapper
 from app.utils.config import ConfigLoader
-from app.ui.tabs_definition import TradingViewTab, OrdersTab
+from app.ui.tabs_definition import TradingViewTab, OrdersTab, BalanceTab
 from app.utils.logger import setup_logger
 
 class DataUpdateWorker(QThread):
-    update_tab = pyqtSignal(object, object, object, object)
+    update_tab = pyqtSignal(object, object, object, object, object)
 
     error_occurred = pyqtSignal(str)
 
@@ -26,22 +26,28 @@ class DataUpdateWorker(QThread):
         self.num_candles = config.get("num_candles", 100)
         self.rsi_period = config.get("rsi_period", 14)
     
-    def emit_update_tab(self, candlesticks_data=None, depth_data=None, rsi_period_data=None, orders_data=None):
+    def emit_update_tab(self, candlesticks_data=None, depth_data=None, rsi_period_data=None, orders_data=None, balance_data=None):
         # Emit the signal, providing default None values where necessary
-        self.update_tab.emit(candlesticks_data, depth_data, rsi_period_data, orders_data)
+        self.update_tab.emit(candlesticks_data, depth_data, rsi_period_data, orders_data, balance_data)
 
     def run(self):
         try:
-            depth = self.api_wrapper.get_depth_data(self.trading_pair, limit=(self.num_candles+self.rsi_period))
-            if self.selected_tab=="TradingView":
-                # Fetch candlestick and depth data
-                candlesticks = self.api_wrapper.get_candlestick_data(self.trading_pair, interval=self.interval, limit=(self.num_candles+self.rsi_period))
+            if self.selected_tab=="TradingView" or self.selected_tab=="Orders":
+                depth = self.api_wrapper.get_depth_data(self.trading_pair, limit=(self.num_candles+self.rsi_period))
+                
+                if self.selected_tab=="TradingView":
+                    # Fetch candlestick and depth data
+                    candlesticks = self.api_wrapper.get_candlestick_data(self.trading_pair, interval=self.interval, limit=(self.num_candles+self.rsi_period))
+                    # Emit the data
+                    self.emit_update_tab(candlesticks_data=candlesticks, depth_data=depth, rsi_period_data=self.rsi_period)
+                if self.selected_tab=="Orders":
+                    orders = self.api_wrapper.get_open_orders(self.trading_pair)
+                    # Emit the data
+                    self.emit_update_tab(orders_data=orders, depth_data=depth)
+            if self.selected_tab=="Balance":
+                balance = self.api_wrapper.get_account_balances()
                 # Emit the data
-                self.emit_update_tab(candlesticks_data=candlesticks, depth_data=depth, rsi_period_data=self.rsi_period)
-            if self.selected_tab=="Orders":
-                orders = self.api_wrapper.get_open_orders(self.trading_pair)
-                # Emit the data
-                self.emit_update_tab(orders_data=orders, depth_data=depth)
+                self.emit_update_tab(balance_data=balance)
             
         except Exception as e:
             # Emit the error
@@ -209,6 +215,9 @@ class MainWindow(QMainWindow):
         # Connect the OrdersTab signal to the main window's order creation handler
         self.orders_tab.order_requested.connect(self.handle_order_request)
 
+        self.balance_Tab = BalanceTab(logger=self.logger)
+        self.tab_widget.addTab(self.balance_Tab, "Balance")
+
         # Connect the tab change signal to a handler
         self.tab_widget.currentChanged.connect(self.handle_tab_change)
 
@@ -232,6 +241,8 @@ class MainWindow(QMainWindow):
             self.tab_selected="TradingView"
         elif current_tab == self.orders_tab:
             self.tab_selected="Orders"
+        elif current_tab == self.balance_Tab:
+            self.tab_selected="Balance"
         
         if(update):
             self.start_main_window_update()
@@ -318,12 +329,14 @@ class MainWindow(QMainWindow):
         self.chart_worker.error_occurred.connect(self.handle_update_main_window_error)
         self.chart_worker.start()
 
-    def update_main_window(self, candlesticks=None, depth=None, rsi_period=None, orders=None, tickets=None):
+    def update_main_window(self, candlesticks=None, depth=None, rsi_period=None, orders=None, balance=None):
         self.logger.info(f"Window update showing {self.tab_selected} information.")
         if (self.tab_selected=="TradingView"):
             self.trading_view_tab.update(candlesticks, depth, rsi_period)
         if (self.tab_selected=="Orders"):
             self.orders_tab.update(open_orders=orders, order_book_data=depth)
+        if (self.tab_selected=="Balance"):
+            self.balance_Tab.update(balances=balance)
         
         self.update_pair_info()
 

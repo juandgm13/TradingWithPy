@@ -1,6 +1,8 @@
 from binance.spot import Spot
 from app.utils.logger import setup_logger
 
+#For example code go to: https://github.com/binance/binance-connector-python/blob/master/examples
+
 class BinanceAPI:
     def __init__(self, api_key=None, api_secret=None, logger=None, test_enabled=False):
         """
@@ -140,4 +142,23 @@ class BinanceAPI:
             return response
         except Exception as e:
             self.logger.error(f"Failed to place order: {str(e)}")
+            raise e
+        
+    
+    def get_account_balances(self):
+        """
+        Fetch the user's current spot balances.
+        Returns:
+            dict: A dictionary with asset names as keys and balances as values.
+        """
+        try:
+            account_info = self.client.account()
+            balances = {
+                balance['asset']: float(balance['free'])
+                for balance in account_info['balances']
+                if float(balance['free']) > 0  # Only show non-zero balances
+            }
+            return balances
+        except Exception as e:
+            self.logger.error(f"Failed to fetch account balances: {str(e)}")
             raise e
