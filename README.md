@@ -16,7 +16,7 @@ A desktop-based trading dashboard built with PyQt5 that integrates charting, tra
 - Notification System: Push alerts for significant price changes.
 
 ## Trading Dashboard Overview
-![image](https://github.com/user-attachments/assets/f29490b7-7bc7-47b4-bdc0-74b48a1fa805)
+![image](https://github.com/user-attachments/assets/1611bdaa-bba7-4097-8da0-60cd3b004e69)
 
 ## Installation
 
