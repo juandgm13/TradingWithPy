@@ -3,7 +3,7 @@ import pyqtgraph as pg
 from PyQt5.QtCore import Qt
 from app.utils.indicators import IndicatorCalculator
 import datetime
-
+import numpy as np
 
 class TimeAxisItem(pg.AxisItem):
     def tickStrings(self, values, scale, spacing):
@@ -16,62 +16,61 @@ class CandlestickChart(QWidget):
         super().__init__()
         layout = QVBoxLayout()
         # Create the chart with the custom time axis
-        self.chart = pg.PlotWidget(title="Candlestick Chart", axisItems={'bottom': TimeAxisItem(orientation='bottom')})
+        #self.chart = pg.PlotWidget(title="Candlestick Chart", axisItems={'bottom': TimeAxisItem(orientation='bottom')})
+        self.chart = pg.PlotWidget(title="Candlestick Chart")
         self.chart.setLabel('bottom', 'Time')
         self.chart.setLabel('left', 'Price')
         layout.addWidget(self.chart)
         self.setLayout(layout)
 
     def update_chart(self, candlestick_data, period=0, sma_enabled=False, ema_enabled=False, bb_enabled=False):
-        """Updates the chart with standard candlestick format and time-based X-axis."""
+        """Updates the chart with candlestick format, adjusted for time gaps, and with indicators."""
         self.chart.clear()
 
-        # Add indicators if enabled
-        times = [c[0] for c in candlestick_data]
-        times=times[period:]
-        if(sma_enabled):
-            self.add_sma(period, candlestick_data, times)
-        if(ema_enabled):
-            self.add_ema(period, candlestick_data, times)
-        if(bb_enabled):
-            self.add_bollinger_bands(period, data=candlestick_data, times=times)
+        if not candlestick_data:
+            return  # Avoid errors if data is empty
 
-        # Discard the period candlesticks if specified
+        # Extract timestamps & normalize x-axis to fix gaps
+        times = [c["time"] for c in candlestick_data]
+        x_positions = np.arange(len(times)-period)  # Generate sequential indices for x-axis
+
+        # === Add Indicators if Enabled ===
+        if sma_enabled:
+            self.add_sma(period, candlestick_data, x_positions)
+        if ema_enabled:
+            self.add_ema(period, candlestick_data, x_positions)
+        if bb_enabled:
+            self.add_bollinger_bands(period, data=candlestick_data, times=x_positions)
+
+        # Remove period from data
         candlestick_data = candlestick_data[period:]
-        
-        # Extract data
-        times = [c[0] for c in candlestick_data]
-        opens = [float(c[1]) for c in candlestick_data]
-        highs = [float(c[2]) for c in candlestick_data]
-        lows = [float(c[3]) for c in candlestick_data]
-        closes = [float(c[4]) for c in candlestick_data]
 
-        # Bar width (90% of the interval between candlesticks)
-        if len(times) > 1:
-            bar_width = (times[1] - times[0]) * 0.9
-        else:
-            bar_width = 1  # Default width for single candlestick
+        opens = np.array([float(c["open"]) for c in candlestick_data])
+        highs = np.array([float(c["high"]) for c in candlestick_data])
+        lows = np.array([float(c["low"]) for c in candlestick_data])
+        closes = np.array([float(c["close"]) for c in candlestick_data])
 
-        for t, o, h, l, c in zip(times, opens, highs, lows, closes):
-            # Determine color
-            is_rising = c >= o
-            color = (0, 255, 0) if is_rising else (255, 0, 0)
+        # Set a reasonable bar width
+        bar_width = 0.7  # Fixed width to maintain equal spacing
 
-            # Draw high-low line
-            self.chart.plot([t, t], [l, h], pen=pg.mkPen(color, width=1))
+        for x, o, h, l, c in zip(x_positions, opens, highs, lows, closes):
+            color = (0, 255, 0) if c >= o else (255, 0, 0)
 
-            # Draw body
+            # High-Low Line
+            self.chart.plot([x, x], [l, h], pen=pg.mkPen(color, width=1))
+
+            # Candlestick Body
             body_bottom = min(o, c)
             body_top = max(o, c)
-            body = QGraphicsRectItem(t - bar_width / 2, body_bottom, bar_width, body_top - body_bottom)
+            body = QGraphicsRectItem(x - bar_width / 2, body_bottom, bar_width, body_top - body_bottom)
             body.setBrush(pg.mkBrush(color))
             body.setPen(pg.mkPen(color))
             self.chart.addItem(body)
 
-        # Adjust the chart's scale
-        if times and highs and lows:
-            self.chart.setXRange(min(times), max(times), padding=0.1)
-            self.chart.setYRange(min(lows), max(highs), padding=0.1)
+        # Apply scaling
+        self.chart.setXRange(min(x_positions), max(x_positions), padding=0.05)
+        self.chart.setYRange(min(lows), max(highs), padding=0.1)
+
 
     def add_sma(self, period=20, data=None, times=None):
         """Calculate and plot the Simple Moving Average."""
@@ -98,7 +97,8 @@ class VolumeChart(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout()
-        self.chart = pg.PlotWidget(title="Volume Chart", axisItems={'bottom': TimeAxisItem(orientation='bottom')})
+        #self.chart = pg.PlotWidget(title="Volume Chart", axisItems={'bottom': TimeAxisItem(orientation='bottom')})
+        self.chart = pg.PlotWidget(title="Volume Chart")
         self.chart.setLabel('bottom', 'Time')
         self.chart.setLabel('left', 'Volume')
         layout.addWidget(self.chart)
@@ -111,16 +111,15 @@ class VolumeChart(QWidget):
         # Discard the first n candlesticks if specified
         candlestick_data = candlestick_data[discard_first_n:]
 
-        # Extract data
-        times = [c[0] for c in candlestick_data]  # Timestamps
-        volumes = [float(c[5]) for c in candlestick_data]  # Volumes
-        is_buy_volume = [float(c[4]) >= float(c[1]) for c in candlestick_data]  # Buy/Sell distinction
+         # Extract timestamps & normalize x-axis to fix gaps
+        times = [c["time"] for c in candlestick_data]
+        x_positions = np.arange(len(times))  # Generate sequential indices for x-axis
 
-        # Adjust width: use the time difference between consecutive candlesticks
-        if len(times) > 1:
-            bar_width = (times[1] - times[0]) * 0.9  # Slightly narrower than the time difference
-        else:
-            bar_width = 1  # Default if only one candlestick
+        # Extract data
+        volumes = [float(c["volume"]) for c in candlestick_data]  # Volumes
+        is_buy_volume = [float(c["close"]) >= float(c["open"]) for c in candlestick_data]  # Buy/Sell distinction
+
+        bar_width = 1 
 
         # Create brushes for colors (green for buy, red for sell)
         brushes = [
@@ -129,12 +128,12 @@ class VolumeChart(QWidget):
         ]
 
         # Plot bars
-        bars = pg.BarGraphItem(x=times, height=volumes, width=bar_width, brushes=brushes)
+        bars = pg.BarGraphItem(x=x_positions, height=volumes, width=bar_width, brushes=brushes)
         self.chart.addItem(bars)
 
         # Adjust the chart's scale
         if times and volumes:
-            self.chart.setXRange(min(times), max(times), padding=0.1)
+            self.chart.setXRange(min(x_positions), max(x_positions), padding=0.05)
             self.chart.setYRange(0, max(volumes) * 1.1, padding=0.1)
 
 
@@ -153,7 +152,7 @@ class DepthChart(QWidget):
     def update_chart(self, depth_data, discard_first_n=0):
         """Updates the depth chart with cumulative data and adjusts scale."""
         self.chart.clear()
-
+    
        # Discard the first n entries from bids and asks
         bids = sorted(depth_data['bids'][discard_first_n:], key=lambda x: float(x[0]), reverse=True)
         asks = sorted(depth_data['asks'][discard_first_n:], key=lambda x: float(x[0]))

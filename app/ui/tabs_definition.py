@@ -196,8 +196,12 @@ class TradingViewTab(QWidget):
 
             # Update depth chart
             try:
-                self.depth_chart.update_chart(depth, rsi_period)
-                self.logger.info("Depth chart updated successfully.")
+                if(depth==None):
+                    self.depth_chart.setVisible(False)
+                else:
+                    self.depth_chart.setVisible(True)
+                    self.depth_chart.update_chart(depth, rsi_period)
+                    self.logger.info("Depth chart updated successfully.")
             except Exception as e:
                 self.logger.error(f"Failed to update depth chart: {e}")
                 self.show_error_message(f"Depth chart error: {e}")
@@ -205,7 +209,7 @@ class TradingViewTab(QWidget):
             # Update RSI chart if there is enough data
             try:
                 if len(candlesticks) > rsi_period:  # Ensure there's enough data for the default RSI period (14)
-                    closing_prices = [float(c[4]) for c in candlesticks]  # Extract closing prices
+                    closing_prices = [float(c["close"]) for c in candlesticks]  # Extract closing prices
                     self.rsi_chart.update_chart(closing_prices, period=rsi_period)
                     self.logger.info("RSI chart updated successfully.")
                 else:
@@ -231,7 +235,7 @@ class TradingViewTab(QWidget):
         elif self.radio_1d.isChecked():
             new_selected_interval = '1d'
 
-        if new_selected_interval != self.selected_interval :
+        if new_selected_interval != self.selected_interval:
             self.selected_interval=new_selected_interval
             self.interval_changed.emit(self.selected_interval)
 
@@ -490,13 +494,21 @@ class OrdersTab(QWidget):
         """
         Update the tab's content using the provided data.
         """
+        if order_book_data == None:
+            bids=[]
+            asks=[]
+            self.order_book.setVisible(False)
+            self.order_book_label.setVisible(False)
+        else:
+            self.order_book.setVisible(True)
+            self.order_book_label.setVisible(True)
+            
+            # Extract and sort data
+            bids = sorted(order_book_data['bids'], key=lambda x: float(x[0]), reverse=True)  # Descending prices
+            asks = sorted(order_book_data['asks'], key=lambda x: float(x[0]))  # Ascending prices
 
-        # Extract and sort data
-        bids = sorted(order_book_data['bids'], key=lambda x: float(x[0]), reverse=True)  # Descending prices
-        asks = sorted(order_book_data['asks'], key=lambda x: float(x[0]))  # Ascending prices
-
-        bids=bids[len(bids)-5:]
-        asks=asks[len(asks)-5:]
+            bids=bids[len(bids)-5:]
+            asks=asks[len(asks)-5:]
 
         self.order_book.setRowCount(10)
         row=0

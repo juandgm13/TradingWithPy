@@ -1,5 +1,6 @@
 from binance.spot import Spot
 from app.utils.logger import setup_logger
+from app.utils.symbol_info import SymbolInfo
 
 #For example code go to: https://github.com/binance/binance-connector-python/blob/master/examples
 
@@ -10,6 +11,7 @@ class BinanceAPI:
         :param api_key: Binance API key (optional)
         :param api_secret: Binance API secret (optional)
         :param logger: Initialized logger (optional)
+        :param test_enabled: to use TestNet (optional)
         """
         if logger==None:
             self.logger = setup_logger()
@@ -23,7 +25,7 @@ class BinanceAPI:
             self.client = Spot(api_key=api_key, api_secret=api_secret)
             self.logger.info("BinanceAPI initialized.")
 
-    def get_trading_pairs(self):
+    def get_trading_symbols(self):
         """
         Fetches all available trading pairs (symbols) from Binance.
         :return: List of trading pairs as strings.
@@ -43,16 +45,29 @@ class BinanceAPI:
         :param trading_pair: The trading pair (e.g., BTCUSDT).
         :param interval: Candlestick interval (default: '1h').
         :param limit: Number of candlesticks to fetch (default: 100).
-        :return: List of candlestick data.
+        :return: List of candlestick data as dictionaries.
         """
         try:
             candlesticks = self.client.klines(trading_pair, interval, limit=limit)
-            self.logger.debug(f"Fetched candlestick data for {trading_pair}: {candlesticks}")
-            return candlesticks
+            formatted_candles = [
+                {
+                    "time": candle[0],  # Timestamp
+                    "open": float(candle[1]),  # Open price
+                    "high": float(candle[2]),  # High price
+                    "low": float(candle[3]),  # Low price
+                    "close": float(candle[4]),  # Close price
+                    "volume": float(candle[5])  # Volume
+                }
+                for candle in candlesticks
+            ]
+
+            self.logger.debug(f"Fetched candlestick data for {trading_pair}: {formatted_candles}")
+            return formatted_candles
+        
         except Exception as e:
             self.logger.error(f"Error fetching candlestick data for {trading_pair}: {e}")
             raise
-
+    
     def get_depth_data(self, trading_pair, limit=100):
         """
         Fetches depth data for a given trading pair.
@@ -83,7 +98,7 @@ class BinanceAPI:
             # Prepare the result dictionary
             ticker_info = {
                 'price': float(price['price']),
-                'change': float(stats['priceChangePercent']),
+                #'change': float(stats['priceChangePercent']),
                 'high': float(stats['highPrice']),
                 'low': float(stats['lowPrice']),
                 'volume': float(stats['volume'])
@@ -143,8 +158,7 @@ class BinanceAPI:
         except Exception as e:
             self.logger.error(f"Failed to place order: {str(e)}")
             raise e
-        
-    
+         
     def get_account_balances(self):
         """
         Fetch the user's current spot balances.
@@ -162,3 +176,24 @@ class BinanceAPI:
         except Exception as e:
             self.logger.error(f"Failed to fetch account balances: {str(e)}")
             raise e
+        
+    def get_symbol_info(self, symbol: str):
+        """
+        Fetches symbol information from Binance.
+
+        :param symbol: The trading pair (e.g., 'BTCUSDT').
+        :return: SymbolInfo object containing name, exchange, and symbol.
+        """
+        try:
+            exchange_info = self.client.exchange_info()
+            for s in exchange_info['symbols']:
+                if s['symbol'] == symbol:
+                    name = symbol  # Binance doesn't provide asset names in exchange_info
+                    exchange = "Binance"
+                    return SymbolInfo(name=name, exchange=exchange, symbol=symbol)
+
+            self.logger.warning(f"Symbol {symbol} not found on Binance.")
+            return None
+        except Exception as e:
+            self.logger.error(f"Error fetching symbol info from Binance: {e}")
+            raise

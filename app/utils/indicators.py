@@ -5,7 +5,7 @@ class IndicatorCalculator:
     @staticmethod
     def extract_closing_prices(candlesticks):
         """Extracts closing prices from candlestick data."""
-        return [float(c[4]) for c in candlesticks]
+        return [float(c["close"]) for c in candlesticks]
 
     @staticmethod
     def calculate_sma(period, candlesticks):

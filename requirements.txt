@@ -5,5 +5,8 @@ pyqtgraph>=0.12.4
 # Binance API Wrapper
 binance-connector>=1.11.0
 
+# Alpaca API Wrapper
+alpaca-trade-api
+
 # Configuration and Environment Variables
 python-dotenv>=1.0.0

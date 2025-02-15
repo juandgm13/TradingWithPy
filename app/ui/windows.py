@@ -2,7 +2,7 @@ from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QLabel, QComboBox, QLineEdit, QTabWidget, QHBoxLayout, QMessageBox
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtGui import QIcon
-from app.api.api_wrapper import APIWrapper
+from app.api.api_manager import APIManager
 from app.utils.config import ConfigLoader
 from app.ui.tabs_definition import TradingViewTab, OrdersTab, BalanceTab
 from app.utils.logger import setup_logger
@@ -12,9 +12,9 @@ class DataUpdateWorker(QThread):
 
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, api_wrapper, trading_pair, interval='1h', selected_tab="TradingView"):
+    def __init__(self, api_manager, trading_pair, interval='1h', selected_tab="TradingView"):
         super().__init__()
-        self.api_wrapper = api_wrapper
+        self.api_manager = api_manager
         self.trading_pair = trading_pair
         self.interval = interval
         self.selected_tab=selected_tab
@@ -33,26 +33,25 @@ class DataUpdateWorker(QThread):
     def run(self):
         try:
             if self.selected_tab=="TradingView" or self.selected_tab=="Orders":
-                depth = self.api_wrapper.get_depth_data(self.trading_pair, limit=(self.num_candles+self.rsi_period))
+                depth = self.api_manager.get_depth_data(self.trading_pair, limit=(self.num_candles+self.rsi_period))
                 
                 if self.selected_tab=="TradingView":
                     # Fetch candlestick and depth data
-                    candlesticks = self.api_wrapper.get_candlestick_data(self.trading_pair, interval=self.interval, limit=(self.num_candles+self.rsi_period))
+                    candlesticks = self.api_manager.get_candlestick_data(self.trading_pair, interval=self.interval, limit=(self.num_candles+self.rsi_period))
                     # Emit the data
                     self.emit_update_tab(candlesticks_data=candlesticks, depth_data=depth, rsi_period_data=self.rsi_period)
                 if self.selected_tab=="Orders":
-                    orders = self.api_wrapper.get_open_orders(self.trading_pair)
+                    orders = self.api_manager.get_open_orders(self.trading_pair)
                     # Emit the data
                     self.emit_update_tab(orders_data=orders, depth_data=depth)
             if self.selected_tab=="Balance":
-                balance = self.api_wrapper.get_account_balances()
+                balance = self.api_manager.get_account_balances()
                 # Emit the data
                 self.emit_update_tab(balance_data=balance)
             
         except Exception as e:
             # Emit the error
             self.error_occurred.emit(str(e))
-
 
 class MainWindow(QMainWindow):
     def __init__(self, logger=None):
@@ -78,14 +77,8 @@ class MainWindow(QMainWindow):
         else:
             self.logger = logger
 
-        # Initialize API wrapper
-        self.api_wrapper = APIWrapper(api_name="binance",logger=self.logger)  # Initialize with Binance API
-
-        self.trading_pairs = self.api_wrapper.get_trading_pairs()
-        self.filtered_pairs = self.trading_pairs[:]  # Copy for filtering
-
-        # Default pair
-        self.current_pair = "BTCUSDT" if "BTCUSDT" in self.trading_pairs else self.trading_pairs[0]
+        # Initialize API manager
+        self.api_manager = APIManager(logger=self.logger)
 
         # Initialize the chart worker
         self.chart_worker = None
@@ -98,13 +91,36 @@ class MainWindow(QMainWindow):
 
         # Apply dark mode to the window
         self.apply_dark_mode()
-
+        
         # Start a timer to update charts every 5 seconds
         self.update_timer = QTimer(self)
         self.update_timer.timeout.connect(self.start_main_window_update)
         self.update_timer.start(self.timer_interval)
 
-        # Load initial data
+        # Select the first item in the list of api clients
+        self.select_api(self.api_manager.get_api_clients_list()[0])
+
+    def select_api(self, api_name):
+        self.reset_update_timer()
+
+        self.api_manager.set_api(api_name)
+
+        self.trading_pairs = self.api_manager.get_trading_symbols()
+        self.filtered_pairs = self.trading_pairs[:]  # Copy for filtering 
+
+        # Update dropdown for selecting trading pair
+        self.pair_selector.clear()
+        self.pair_selector.addItems(self.trading_pairs)
+        if "BTCUSDC" in self.trading_pairs:
+            self.current_pair = "BTCUSDC" 
+        elif "BTC/USDC" in self.trading_pairs:
+            self.current_pair = "BTC/USDC" 
+        else:
+            self.trading_pairs[0]
+        self.pair_selector.setCurrentText(self.current_pair)
+
+        # Default pair for binance
+
         self.start_main_window_update()
 
     def reset_update_timer(self):
@@ -140,6 +156,15 @@ class MainWindow(QMainWindow):
         # Create the top layout for trading pair selection and info
         top_layout = QVBoxLayout()
 
+        # Dropdown for selecting API
+        self.api_selector = QComboBox()
+        self.api_selector.addItems(self.api_manager.get_api_clients_list())
+        self.api_selector.setCurrentText(self.api_manager.get_api_clients_list()[0])
+        self.api_selector.setStyleSheet("color: white; background-color: #2e2e2e;")
+        self.api_selector.currentTextChanged.connect(self.on_api_changed)
+        top_layout.addWidget(QLabel("Select API:"))
+        top_layout.addWidget(self.api_selector)
+
         # Search input
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search trading pairs...")
@@ -149,30 +174,39 @@ class MainWindow(QMainWindow):
 
         # Dropdown for selecting trading pair
         self.pair_selector = QComboBox()
-        self.pair_selector.addItems(self.trading_pairs)
-        self.pair_selector.setCurrentText(self.current_pair)
+        #self.pair_selector.addItems(self.trading_pairs)
+        #self.pair_selector.setCurrentText(self.current_pair)
         self.pair_selector.setStyleSheet("color: white; background-color: #2e2e2e;")
         self.pair_selector.currentTextChanged.connect(self.on_pair_changed)
         top_layout.addWidget(QLabel("Select Trading Pair:"))
         top_layout.addWidget(self.pair_selector)
 
         # Info Panel (Displaying trading pair details)
-        self.info_panel = QHBoxLayout()
+        self.info_panel = QVBoxLayout()
+        self.info_panel_1 = QHBoxLayout()
+        self.info_panel_2 = QHBoxLayout()
+
+        self.name_label = QLabel("Name: -")
+        self.name_label.setStyleSheet("color: white;")
+        self.exchange_label = QLabel("Exchange: -")
+        self.exchange_label.setStyleSheet("color: white;")
+
+        self.info_panel_1.addWidget(self.name_label)
+        self.info_panel_1.addWidget(self.exchange_label)
 
         self.price_label = QLabel("Price: -")
         self.price_label.setStyleSheet("color: white;")
-        self.change_label = QLabel("24h Change: -")
-        self.change_label.setStyleSheet("color: white;")
         self.high_low_label = QLabel("24h High/Low: -")
         self.high_low_label.setStyleSheet("color: white;")
         self.volume_label = QLabel("24h Volume: -")
         self.volume_label.setStyleSheet("color: white;")
 
-        self.info_panel.addWidget(self.price_label)
-        self.info_panel.addWidget(self.change_label)
-        self.info_panel.addWidget(self.high_low_label)
-        self.info_panel.addWidget(self.volume_label)
+        self.info_panel_2.addWidget(self.price_label)
+        self.info_panel_2.addWidget(self.high_low_label)
+        self.info_panel_2.addWidget(self.volume_label)
 
+        self.info_panel.addLayout(self.info_panel_1)
+        self.info_panel.addLayout(self.info_panel_2)
         top_layout.addLayout(self.info_panel)
 
         # Add the top layout to the main layout (above the tab view)
@@ -255,7 +289,7 @@ class MainWindow(QMainWindow):
         order_details["type"] = "LIMIT"  # Assuming LIMIT order by default
 
         try:
-            response = self.api_wrapper.place_order(order_details)
+            response = self.api_manager.place_order(order_details)
             self.logger.info(f"Order placed: {response}")
             # Format the order details for the message
             message = (
@@ -270,7 +304,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.logger.error(f"Failed to place order: {e}")
             self.show_popup("Order Creation Failed!", e.error_message)
-
 
     def update_interval(self, new_interval):
         self.logger.info(f"Interval has been updated ({self.selected_interval}->{new_interval}).")
@@ -293,6 +326,10 @@ class MainWindow(QMainWindow):
         else:
             self.on_pair_changed("")  # Clear the charts if no match
 
+    def on_api_changed(self, api_name):
+        """Handles change in api selection."""
+        self.select_api(api_name)
+
     def on_pair_changed(self, trading_pair):
         """Handles change in trading pair selection."""
         self.current_pair = trading_pair
@@ -301,10 +338,13 @@ class MainWindow(QMainWindow):
     def update_pair_info(self):
         """Fetches and updates the trading pair information."""
         try:
-            info = self.api_wrapper.get_ticker_info(self.current_pair)
-            # Assume `info` contains: {'price': float, 'change': float, 'high': float, 'low': float, 'volume': float}
+            SelectedSymbol=self.api_manager.get_symbol_info(self.current_pair)
+            self.name_label.setText(f"Name: {SelectedSymbol.name}")
+            self.exchange_label.setText(f"Exchange: {SelectedSymbol.exchange}")
+            
+            info = self.api_manager.get_ticker_info(self.current_pair)
+            # Assume `info` contains: {'price': float, 'high': float, 'low': float, 'volume': float}
             self.price_label.setText(f"Price: {info['price']:.2f}")
-            self.change_label.setText(f"24h Change: {info['change']:.2f}%")
             self.high_low_label.setText(f"24h High/Low: {info['high']:.2f} / {info['low']:.2f}")
             self.volume_label.setText(f"24h Volume: {info['volume']:.2f}")
             self.logger.info(f"Updated pair info for {self.current_pair}.")
@@ -324,7 +364,7 @@ class MainWindow(QMainWindow):
             return
 
         self.logger.info(f"Starting main window update for {self.current_pair} with interval {self.selected_interval}.")
-        self.chart_worker = DataUpdateWorker(self.api_wrapper, self.current_pair, self.selected_interval, self.tab_selected)
+        self.chart_worker = DataUpdateWorker(self.api_manager, self.current_pair, self.selected_interval, self.tab_selected)
         self.chart_worker.update_tab.connect(self.update_main_window)
         self.chart_worker.error_occurred.connect(self.handle_update_main_window_error)
         self.chart_worker.start()
