@@ -10,3 +10,6 @@ alpaca-trade-api
 
 # Configuration and Environment Variables
 python-dotenv>=1.0.0
+
+# Pytest for testing
+pytest
