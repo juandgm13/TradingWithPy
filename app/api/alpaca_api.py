@@ -170,37 +170,7 @@ class AlpacaAPI:
         except Exception as e:
             self.logger.error(f"Error fetching account balances: {e}")
             raise
-
-    def place_order(self, order_details):
-        """
-        Places a new limit order.
-
-        Args:
-            order_details (dict): Details of the order to be placed, including:
-                                  - symbol (str): The trading pair, e.g., 'BTCUSDT'.
-                                  - side (str): 'BUY' or 'SELL'.
-                                  - type (str): Order type, e.g., 'LIMIT'.
-                                  - price (str): The order price as a string.
-                                  - quantity (str): The order quantity as a string.
-
-        Returns:
-            dict: The response from the Binance API containing order details.
-        """
-        try:
-            response = self.client.new_order(
-                symbol=order_details['symbol'],
-                side=order_details['side'],
-                type=order_details['type'],
-                timeInForce='GTC',  # Good-Till-Canceled
-                quantity=order_details['quantity'],
-                price=order_details['price']
-            )
-            self.logger.info(f"Placed order: {response}")
-            return response
-        except Exception as e:
-            self.logger.error(f"Failed to place order: {str(e)}")
-            raise e
-        
+    
     def place_order(self, symbol, qty, side, order_type="market", time_in_force="gtc", limit_price=None, stop_price=None):
         """
         Places a new order.
