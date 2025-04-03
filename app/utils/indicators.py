@@ -63,5 +63,39 @@ class IndicatorCalculator:
 
         return upper_band, lower_band
 
+    @staticmethod
+    def calculate_rsi(period, closing_prices):
+        gains = []
+        losses = []
 
+        for i in range(1, len(closing_prices)):
+            change = closing_prices[i] - closing_prices[i - 1]
+            gains.append(max(change, 0))
+            losses.append(abs(min(change, 0)))
+
+        # Calculate average gain and loss
+        avg_gain = sum(gains[:period]) / period
+        avg_loss = sum(losses[:period]) / period
+
+        rsi = [None] * period  # Padding initial values
+        
+        # Initial RS value
+        if avg_loss == 0:
+            rsi.append(100)
+        else:
+            rs = avg_gain / avg_loss
+            rsi.append(100 - (100 / (1 + rs)))
+
+        # Smoothly calculate RSI using the Wilder’s formula
+        for i in range(period + 1, len(closing_prices)):
+            avg_gain = (avg_gain * (period - 1) + gains[i - 1]) / period
+            avg_loss = (avg_loss * (period - 1) + losses[i - 1]) / period
+            
+            if avg_loss == 0:
+                rsi.append(100)
+            else:
+                rs = avg_gain / avg_loss
+                rsi.append(100 - (100 / (1 + rs)))
+            
+        return rsi
 
