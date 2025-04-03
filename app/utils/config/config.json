@@ -2,5 +2,11 @@
     "num_candles": 100,
     "indicators_period": 14,
     "timer_interval_ms": 5000,
-    "enable_test_trading": true
+    "enable_test_trading": true,
+    "email_notifications": false,
+    "email": {
+        "sender": "your_email@gmail.com",
+        "password": "your_password",
+        "recipient": "recipient_email@gmail.com"
+    }
 }
