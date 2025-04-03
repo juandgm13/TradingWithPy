@@ -8,15 +8,13 @@ class IndicatorCalculator:
         return [float(c["close"]) for c in candlesticks]
 
     @staticmethod
-    def calculate_sma(period, candlesticks):
+    def calculate_sma(period, closing_prices):
         """Calculate Simple Moving Average (SMA)."""
-        closing_prices = IndicatorCalculator.extract_closing_prices(candlesticks)
         return [sum(closing_prices[i - period:i]) / period for i in range(period, len(closing_prices))]
 
     @staticmethod
-    def calculate_ema(period, candlesticks):
+    def calculate_ema(period, closing_prices):
         """Calculate Exponential Moving Average (EMA)."""
-        closing_prices = IndicatorCalculator.extract_closing_prices(candlesticks)
         ema = [None] * (period - 1)  # None values for early indices
         multiplier = 2 / (period + 1)
         initial_sma = sum(closing_prices[:period]) / period
@@ -28,17 +26,14 @@ class IndicatorCalculator:
         return ema
 
     @staticmethod
-    def calculate_bollinger_bands(period, std_dev_multiplier, candlesticks):
-        """Calculate Bollinger Bands."""
-        # Extraer los precios de cierre de los candlesticks
-        closing_prices = IndicatorCalculator.extract_closing_prices(candlesticks)
-        
+    def calculate_bollinger_bands(period, std_dev_multiplier, closing_prices):
+        """Calculate Bollinger Bands."""        
         # Verificar si la longitud de los precios de cierre es menor que el período
         if len(closing_prices) < period:
             raise ValueError(f"La longitud de los datos ({len(closing_prices)}) es menor que el período especificado ({period}).")
         
         # Calcular la Media Móvil Simple (SMA)
-        sma = IndicatorCalculator.calculate_sma(period, candlesticks)
+        sma = IndicatorCalculator.calculate_sma(period, closing_prices)
 
         # Verificar que la SMA tenga la longitud adecuada
         if len(sma) < period:

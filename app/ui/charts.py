@@ -74,17 +74,20 @@ class CandlestickChart(QWidget):
 
     def add_sma(self, period=20, data=None, times=None):
         """Calculate and plot the Simple Moving Average."""
-        sma_data = IndicatorCalculator.calculate_sma(period=period, candlesticks=data)
+        closing_prices = IndicatorCalculator.extract_closing_prices(data)
+        sma_data = IndicatorCalculator.calculate_sma(period=period, closing_prices=closing_prices)
         self.chart.plot(times, sma_data, pen=pg.mkPen('blue', width=1), name="SMA")
 
     def add_ema(self, period=20, data=None, times=None):
         """Calculate and plot the Exponential Moving Average."""
-        ema_data = IndicatorCalculator.calculate_ema(period, data)
+        closing_prices = IndicatorCalculator.extract_closing_prices(data)
+        ema_data = IndicatorCalculator.calculate_ema(period, closing_prices)
         self.chart.plot(times, ema_data[period:], pen=pg.mkPen('orange', width=1), name="EMA")
     
     def add_bollinger_bands(self, period=20, std_dev_multiplier=2, data=None, times=None):
         """Calculate and plot Bollinger Bands."""
-        upper_band, lower_band = IndicatorCalculator.calculate_bollinger_bands(period, std_dev_multiplier, data)
+        closing_prices = IndicatorCalculator.extract_closing_prices(data)
+        upper_band, lower_band = IndicatorCalculator.calculate_bollinger_bands(period, std_dev_multiplier, closing_prices)
         # Plot the upper band in green
         self.chart.plot(times, upper_band, pen=pg.mkPen('green', width=1), name="Upper Band")
         # Plot the lower band in red
@@ -209,9 +212,15 @@ class RSIChart(QWidget):
         layout.addWidget(self.chart)
         self.setLayout(layout)
 
-    def update_chart(self, data, period=14):
+    def update_chart(self, candlesticks, period=14):
+        
+        closing_prices = IndicatorCalculator.extract_closing_prices(candlesticks)
+
         # Calculate RSI from the price data
-        rsi = self.__calculate_rsi(data, period)
+        rsi = IndicatorCalculator.calculate_rsi(period, closing_prices)
+
+        # Discard the first n candlesticks if specified
+        rsi = rsi[period:]
 
         # Plot the RSI data
         self.chart.clear()  # Clear the previous plot

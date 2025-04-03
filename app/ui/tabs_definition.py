@@ -209,8 +209,7 @@ class TradingViewTab(QWidget):
             # Update RSI chart if there is enough data
             try:
                 if len(candlesticks) > rsi_period:  # Ensure there's enough data for the default RSI period (14)
-                    closing_prices = [float(c["close"]) for c in candlesticks]  # Extract closing prices
-                    self.rsi_chart.update_chart(closing_prices, period=rsi_period)
+                    self.rsi_chart.update_chart(candlesticks, period=rsi_period)
                     self.logger.info("RSI chart updated successfully.")
                 else:
                     self.logger.warning("Not enough candlestick data to update RSI chart.")
