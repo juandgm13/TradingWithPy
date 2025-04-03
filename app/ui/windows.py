@@ -24,7 +24,7 @@ class DataUpdateWorker(QThread):
 
         # Retrieve values from the configuration
         self.num_candles = config.get("num_candles", 100)
-        self.rsi_period = config.get("rsi_period", 14)
+        self.rsi_period = config.get("indicators_period", 14)
     
     def emit_update_tab(self, candlesticks_data=None, depth_data=None, rsi_period_data=None, orders_data=None, balance_data=None):
         # Emit the signal, providing default None values where necessary
@@ -62,7 +62,7 @@ class MainWindow(QMainWindow):
 
         # Retrieve values from the configuration
         self.num_candles = config.get("num_candles", 100)
-        self.rsi_period = config.get("rsi_period", 14)
+        self.rsi_period = config.get("indicators_period", 14)
         self.timer_interval = config.get("timer_interval_ms", 5000)
 
         # Set the window icon

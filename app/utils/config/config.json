@@ -1,6 +1,6 @@
 {
     "num_candles": 100,
-    "rsi_period": 14,
+    "indicators_period": 14,
     "timer_interval_ms": 5000,
     "enable_test_trading": true
 }
