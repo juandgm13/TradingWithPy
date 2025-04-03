@@ -99,3 +99,15 @@ class IndicatorCalculator:
             
         return rsi
 
+    @staticmethod
+    def calculate_macd(closing_prices, short_period=12, long_period=26, signal_period=9):
+        """
+        Calculate the MACD (Moving Average Convergence Divergence) indicator.
+        """
+        short_ema = IndicatorCalculator.calculate_ema(closing_prices, short_period)
+        long_ema = IndicatorCalculator.calculate_ema(closing_prices, long_period)
+        macd_line = short_ema - long_ema
+        signal_line = IndicatorCalculator.calculate_ema(macd_line, signal_period)
+        histogram = macd_line - signal_line
+
+        return macd_line, signal_line, histogram
