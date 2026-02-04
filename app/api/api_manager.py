@@ -65,20 +65,26 @@ class APIManager:
 
     def get_api_clients_list(self):
         """
-        Returns a list of available API client names for use in a combo box.
+        Returns a list of available API client names.
 
         :return: List of API names.
         """
         return list(self.api_clients.keys())
 
-    def get_trading_symbols(self):
+    def get_trading_symbols(self, api_name=None):
         """
         Fetches all available trading pairs (symbols) from the current API.
         :return: List of trading symbols.
         """
-        return self.api_client.get_trading_symbols()
+        if(api_name):
+            if api_name not in self.api_clients:
+                raise ValueError(f"Unsupported API: {api_name}")
+            else:
+                return self.api_clients[api_name].get_trading_symbols()
+        else:
+            return self.api_client.get_trading_symbols()
 
-    def get_candlestick_data(self, trading_pair, interval='1h', limit=100):
+    def get_candlestick_data(self, trading_pair, interval='1h', limit=100, api_name=None):
         """
         Fetches candlestick data for a given trading pair.
 
@@ -87,7 +93,13 @@ class APIManager:
         :param limit: Number of candlesticks to fetch (default: 100).
         :return: List of candlestick data.
         """
-        return self.api_client.get_candlestick_data(trading_pair, interval, limit)
+        if(api_name):
+            if api_name not in self.api_clients:
+                raise ValueError(f"Unsupported API: {api_name}")
+            else:
+                return self.api_clients[api_name].get_candlestick_data(trading_pair, interval, limit)
+        else:
+            return self.api_client.get_candlestick_data(trading_pair, interval, limit)
 
     def get_depth_data(self, trading_pair, limit=100):
         """
@@ -99,14 +111,20 @@ class APIManager:
         """
         return self.api_client.get_depth_data(trading_pair, limit)
 
-    def get_ticker_info(self, trading_pair):
+    def get_ticker_info(self, trading_pair, api_name=None):
         """
         Fetches ticker information for the given trading pair.
 
         :param trading_pair: The trading pair (e.g., BTCUSDT).
         :return: A dictionary containing price, change, high, low, and volume.
         """
-        return self.api_client.get_ticker_info(trading_pair)
+        if(api_name):
+            if api_name not in self.api_clients:
+                raise ValueError(f"Unsupported API: {api_name}")
+            else:
+                return self.api_clients[api_name].get_ticker_info(trading_pair)
+        else:
+            return self.api_client.get_ticker_info(trading_pair)
 
     def get_open_orders(self, pair):
         """
@@ -136,14 +154,20 @@ class APIManager:
         """
         return self.api_client.get_account_balances()
 
-    def get_symbol_info(self, symbol):
+    def get_symbol_info(self, symbol, api_name=None):
         """
         Fetches symbol information from the current API.
 
         :param symbol: The asset symbol.
         :return: SymbolInfo object containing name, exchange, and symbol.
         """
-        return self.api_client.get_symbol_info(symbol)
+        if(api_name):
+            if api_name not in self.api_clients:
+                raise ValueError(f"Unsupported API: {api_name}")
+            else:
+                return self.api_clients[api_name].get_symbol_info(symbol)
+        else:
+            return self.api_client.get_symbol_info(symbol)
     
 
 

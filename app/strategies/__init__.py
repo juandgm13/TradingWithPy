@@ -1,0 +1,4 @@
+"""
+strategies package.
+Handles strategies.
+"""

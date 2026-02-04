@@ -6,6 +6,8 @@ from app.api.api_manager import APIManager
 from app.utils.config import ConfigLoader
 from app.ui.tabs_definition import TradingViewTab, OrdersTab, BalanceTab
 from app.utils.logger import setup_logger
+from app.strategies.strategy_manager import StrategyManager
+from app.strategies.strategies import ThreeScreenStrategy
 
 class DataUpdateWorker(QThread):
     update_tab = pyqtSignal(object, object, object, object, object)
@@ -99,6 +101,25 @@ class MainWindow(QMainWindow):
 
         # Select the first item in the list of api clients
         self.select_api(self.api_manager.get_api_clients_list()[0])
+
+        # Define strategy intervals for Three-Screen Strategy
+        long_term_interval = "1d"
+        mid_term_interval = "4h"
+        short_term_interval = "1h"
+
+        # Create the Three-Screen Strategy instance
+        three_screen_strategy = ThreeScreenStrategy(
+            api_manager=self.api_manager,
+            "binance",
+            long_term_interval=long_term_interval,
+            mid_term_interval=mid_term_interval,
+            short_term_interval=short_term_interval,
+            logger=logger
+        )
+
+        # Create Strategy Manager and add strategy
+        strategy_manager = StrategyManager(logger=logger)
+        strategy_manager.register_strategy("Binance_ThreeScreen", three_screen_strategy)
 
     def select_api(self, api_name):
         self.reset_update_timer()
