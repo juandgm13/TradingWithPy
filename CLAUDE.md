@@ -2,6 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Code Language Policy
+
+**IMPORTANT**: All code, comments, docstrings, commit messages, issue descriptions, and documentation must be written in **English**.
+
+- Code comments: English only
+- Docstrings: English only
+- Variable/function names: English only
+- Commit messages: English only
+- GitHub issues: English only
+- Pull request descriptions: English only
+- Exception: User-facing UI text may be in Spanish if required
+
 ## Project Overview
 
 TradingWithPy es una aplicación de escritorio de trading construida con PyQt5 que integra múltiples exchanges (Binance, Alpaca) con gráficos en tiempo real, indicadores técnicos y un sistema de estrategias automatizadas.
