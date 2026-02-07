@@ -104,10 +104,32 @@ class IndicatorCalculator:
         """
         Calculate the MACD (Moving Average Convergence Divergence) indicator.
         """
-        short_ema = IndicatorCalculator.calculate_ema(closing_prices, short_period)
-        long_ema = IndicatorCalculator.calculate_ema(closing_prices, long_period)
-        macd_line = short_ema - long_ema
-        signal_line = IndicatorCalculator.calculate_ema(macd_line, signal_period)
-        histogram = macd_line - signal_line
+        # Fix: correct parameter order for calculate_ema (period, closing_prices)
+        short_ema = IndicatorCalculator.calculate_ema(short_period, closing_prices)
+        long_ema = IndicatorCalculator.calculate_ema(long_period, closing_prices)
+
+        # Calculate MACD line (element-wise subtraction)
+        macd_line = []
+        for i in range(len(short_ema)):
+            if short_ema[i] is not None and long_ema[i] is not None:
+                macd_line.append(short_ema[i] - long_ema[i])
+            else:
+                macd_line.append(None)
+
+        # Filter out None values for signal line calculation
+        valid_macd_values = [val for val in macd_line if val is not None]
+        signal_line_values = IndicatorCalculator.calculate_ema(signal_period, valid_macd_values)
+
+        # Pad signal line with Nones to match macd_line length
+        num_nones = len(macd_line) - len(signal_line_values)
+        signal_line = [None] * num_nones + signal_line_values
+
+        # Calculate histogram (element-wise subtraction)
+        histogram = []
+        for i in range(len(macd_line)):
+            if macd_line[i] is not None and signal_line[i] is not None:
+                histogram.append(macd_line[i] - signal_line[i])
+            else:
+                histogram.append(None)
 
         return macd_line, signal_line, histogram
