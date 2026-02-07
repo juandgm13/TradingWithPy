@@ -91,33 +91,34 @@ class ThreeScreenStrategy(Strategy_class):
             mid_signal = self.analyze_mid_term(market_data.get(self.mid_term))
             short_signal = self.analyze_short_term(market_data.get(self.short_term))
 
-            prev_state = self.state.get(symbol)
+            prev_state = self.state.get(symbol.symbol)
+            new_state = prev_state  # Initialize to prevent UnboundLocalError
 
             if long_signal == 'buy': #bullish trend, only buy
-                if prev_state == 'buy': 
+                if prev_state == 'buy':
                     # to close the position
                     if mid_signal == 'sell':
                         if short_signal == 'sell':
                             new_state = 'sell'
                 else:
-                    # to open new long position 
+                    # to open new long position
                     if mid_signal == 'buy':
                         if short_signal == 'buy':
-                            new_state = 'buy'     
+                            new_state = 'buy'
             elif long_signal == 'sell': #bearish trend, only sell
-                if prev_state == 'sell': 
+                if prev_state == 'sell':
                     # to close the position
                     if mid_signal == 'buy':
                         if short_signal == 'buy':
                             new_state = 'buy'
                 else:
-                    # to open new short position 
+                    # to open new short position
                     if mid_signal == 'sell':
                         if short_signal == 'sell':
                             new_state = 'sell'
 
             if new_state != prev_state:
-                self.state[symbol] = new_state
+                self.state[symbol.symbol] = new_state
                 if new_state in ['buy', 'sell']:
                     self.logger.info(f"Three-screen strategy triggered a {new_state.upper()} signal for {symbol}.")
                     signal_changes.append({
@@ -142,8 +143,8 @@ class ThreeScreenStrategy(Strategy_class):
         macd_line, signal_line, _ = calculator.calculate_macd(closing_prices, 12, 26, 9)
 
         # Get EMAs
-        ema_50 = calculator.calculate_ema(closing_prices, 50)[-1]  # Last value of EMA 50
-        ema_200 = calculator.calculate_ema(closing_prices, 200)[-1]  # Last value of EMA 200
+        ema_50 = calculator.calculate_ema(50, closing_prices)[-1]  # Last value of EMA 50
+        ema_200 = calculator.calculate_ema(200, closing_prices)[-1]  # Last value of EMA 200
 
         # Determine trend
         if macd_line[-1] > signal_line[-1] and ema_50 > ema_200:
@@ -155,22 +156,25 @@ class ThreeScreenStrategy(Strategy_class):
 
     def analyze_mid_term(self, data):
         calculator = IndicatorCalculator()
-        rsi = calculator.calculate_rsi(data, 14)
+        closing_prices = calculator.extract_closing_prices(data)
+
+        rsi = calculator.calculate_rsi(14, closing_prices)
         std_dev_multiplier = 2
-        upper_band, lower_band = calculator.calculate_bollinger_bands(20, std_dev_multiplier, data)
-        if rsi[-1] < 30 or data['close'][-1] < lower_band:
+        upper_band, lower_band = calculator.calculate_bollinger_bands(20, std_dev_multiplier, closing_prices)
+
+        if rsi[-1] < 30 or closing_prices[-1] < lower_band[-1]:
             return 'buy'
-        elif rsi[-1] > 70 or data['close'][-1] > upper_band:
+        elif rsi[-1] > 70 or closing_prices[-1] > upper_band[-1]:
             return 'sell'
         return 'neutral'
 
     def analyze_short_term(self, data):
         calculator = IndicatorCalculator()
         closing_prices = calculator.extract_closing_prices(data)
-        ema_9 = calculator.calculate_ema(closing_prices, 9)
-        ema_21 = calculator.calculate_ema(closing_prices, 21)
-        if ema_9 > ema_21:
+        ema_9 = calculator.calculate_ema(9, closing_prices)
+        ema_21 = calculator.calculate_ema(21, closing_prices)
+        if ema_9[-1] > ema_21[-1]:
             return 'buy'
-        elif ema_9 < ema_21:
+        elif ema_9[-1] < ema_21[-1]:
             return 'sell'
         return 'neutral'
